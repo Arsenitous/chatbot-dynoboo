@@ -1,0 +1,20 @@
+# Virtual Environment
+venv/
+env/
+
+# Environment Variables
+.env
+
+# Credentials
+credentials.json
+
+# IDEs
+.vscode/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints/
