@@ -1,10 +1,6 @@
-pandas
-numpy
-ipykernel
-gspread
-oauth2client
 google-generativeai
 python-dotenv
 google-genai
 flask
 gunicorn
+requests
