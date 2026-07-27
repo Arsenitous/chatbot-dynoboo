@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban } from "@/lib/supabase";
+import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUser } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Page = "dashboard" | "knowledge" | "workshops" | "pesanan" | "chatlogs" | "access";

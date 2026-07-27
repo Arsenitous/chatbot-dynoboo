@@ -58,5 +58,4 @@ export type AdminUser = {
   username: string;
   role: "superadmin" | "admin";
   created_at: string;
-  updated_at: string;
 };
