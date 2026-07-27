@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
 import { verifyPassword } from "@/lib/auth";
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET!;
+// Session prefix - middleware just checks cookie exists and starts with this prefix
+const SESSION_PREFIX = "dynoboo_";
 
 export async function POST(request: NextRequest) {
   const { username, password } = await request.json();
@@ -31,9 +32,11 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: "Username atau password salah" }, { status: 401 });
   }
 
+  // Buat session token unik yang tidak bergantung ADMIN_SECRET
+  const sessionToken = SESSION_PREFIX + username + "_" + Date.now().toString(36);
+
   const cookieStore = await cookies();
-  // Session secret
-  cookieStore.set("dynoboo_session", ADMIN_SECRET, {
+  cookieStore.set("dynoboo_session", sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 7,
@@ -51,6 +54,7 @@ export async function POST(request: NextRequest) {
 
   return Response.json({ ok: true, username, role: user?.role ?? "superadmin" });
 }
+
 
 export async function DELETE() {
   const cookieStore = await cookies();
