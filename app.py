@@ -4,6 +4,7 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from google import genai
+
 # pyrefly: ignore [missing-import]
 from google.genai import types
 
@@ -16,9 +17,9 @@ app = Flask(__name__)
 # ─── Config ──────────────────────────────────────────────────────────────────
 PAGE_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
-GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY")
-SUPABASE_URL      = os.getenv("SUPABASE_URL")
-SUPABASE_KEY      = os.getenv("SUPABASE_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # ─── Gemini Client ───────────────────────────────────────────────────────────
 client_ai = genai.Client(api_key=GEMINI_API_KEY)
@@ -26,6 +27,7 @@ client_ai = genai.Client(api_key=GEMINI_API_KEY)
 # ─── In-memory session: menyimpan state form registrasi per user ─────────────
 # Format: { sender_id: { "step": "nama"|"alamat"|"no_hp"|"produk", "data": {...} } }
 user_sessions: dict = {}
+
 
 # ─── Supabase Helper ─────────────────────────────────────────────────────────
 def sb_headers() -> dict:
@@ -35,16 +37,22 @@ def sb_headers() -> dict:
         "Content-Type": "application/json",
     }
 
+
 def sb_get(table: str, params: str = "") -> list:
     url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
     r = requests.get(url, headers=sb_headers(), timeout=10)
     r.raise_for_status()
     return r.json()
 
+
 def sb_post(table: str, payload: dict) -> dict:
     url = f"{SUPABASE_URL}/rest/v1/{table}"
-    r = requests.post(url, headers={**sb_headers(), "Prefer": "return=representation"},
-                      json=payload, timeout=10)
+    r = requests.post(
+        url,
+        headers={**sb_headers(), "Prefer": "return=representation"},
+        json=payload,
+        timeout=10,
+    )
     r.raise_for_status()
     result = r.json()
     return result[0] if isinstance(result, list) else result
@@ -59,9 +67,7 @@ def get_knowledge_base() -> str:
         # Ambil workshop yang ACTIVE / UPCOMING
         ws_rows = sb_get("workshops", "status=in.(ACTIVE,UPCOMING)&order=id.asc")
 
-        knowledge = (
-            "Berikut adalah data bisnis DynoBoo (Gunakan ini sebagai acuan menjawab):\n\n"
-        )
+        knowledge = "Berikut adalah data bisnis DynoBoo (Gunakan ini sebagai acuan menjawab):\n\n"
 
         # Tambahkan data workshop ke knowledge
         if ws_rows:
@@ -89,7 +95,9 @@ def get_knowledge_base() -> str:
                 if isinstance(pilihan, str):
                     pilihan = json.loads(pilihan)
                 for opt in pilihan:
-                    knowledge += f"  Jika pilihan '{opt.get('opsi')}': {opt.get('jawaban')}\n"
+                    knowledge += (
+                        f"  Jika pilihan '{opt.get('opsi')}': {opt.get('jawaban')}\n"
+                    )
 
             if row.get("keterangan"):
                 knowledge += f"  Catatan: {row.get('keterangan')}\n"
@@ -103,27 +111,35 @@ def get_knowledge_base() -> str:
 
 
 # ─── 2. Log chat ke Supabase ─────────────────────────────────────────────────
-def log_chat(sender_id: str, user_message: str, bot_response: str, intent: str = "AI_GEMINI"):
+def log_chat(
+    sender_id: str, user_message: str, bot_response: str, intent: str = "AI_GEMINI"
+):
     try:
-        sb_post("chat_logs", {
-            "sender_id":    sender_id,
-            "user_message": user_message,
-            "bot_response": bot_response,
-            "intent":       intent,
-        })
+        sb_post(
+            "chat_logs",
+            {
+                "sender_id": sender_id,
+                "user_message": user_message,
+                "bot_response": bot_response,
+                "intent": intent,
+            },
+        )
     except Exception as e:
         print(f"⚠️ Gagal log chat: {e}", flush=True)
 
 
 # ─── 3. Simpan pesanan ke Supabase ───────────────────────────────────────────
 def save_pesanan(sender_id: str, data: dict):
-    sb_post("pesanan", {
-        "sender_id": sender_id,
-        "nama":      data["nama"],
-        "alamat":    data["alamat"],
-        "no_hp":     data["no_hp"],
-        "produk":    data["produk"],
-    })
+    sb_post(
+        "pesanan",
+        {
+            "sender_id": sender_id,
+            "nama": data["nama"],
+            "alamat": data["alamat"],
+            "no_hp": data["no_hp"],
+            "produk": data["produk"],
+        },
+    )
 
 
 # ─── 4. Generate balasan via Gemini ──────────────────────────────────────────
@@ -174,9 +190,9 @@ def send_instagram_message(recipient_id: str, text_reply: str):
 
 # ─── 6. Form Registrasi Step-by-step ─────────────────────────────────────────
 FORM_STEPS = {
-    "nama":   "📝 Silakan ketik *Nama Lengkap* kamu ya Kak:",
+    "nama": "📝 Silakan ketik *Nama Lengkap* kamu ya Kak:",
     "alamat": "🏠 Sekarang ketik *Alamat Pengiriman/Domisili* kamu Kak:",
-    "no_hp":  "📱 Ketik *Nomor HP/WhatsApp* yang bisa dihubungi ya Kak:",
+    "no_hp": "📱 Ketik *Nomor HP/WhatsApp* yang bisa dihubungi ya Kak:",
     "produk": "🛍️ Terakhir, ketik *Produk atau Workshop* yang ingin kamu pesan:",
 }
 STEP_ORDER = ["nama", "alamat", "no_hp", "produk"]
@@ -184,8 +200,8 @@ STEP_ORDER = ["nama", "alamat", "no_hp", "produk"]
 
 def handle_form(sender_id: str, user_text: str) -> str:
     session = user_sessions.get(sender_id, {})
-    step    = session.get("step")
-    data    = session.get("data", {})
+    step = session.get("step")
+    data = session.get("data", {})
 
     if not step:
         # Mulai form
@@ -233,7 +249,7 @@ def process_message(sender_id: str, user_text: str):
 
     # Cek apakah user sedang dalam proses form registrasi
     if sender_id in user_sessions and user_sessions[sender_id].get("step"):
-        reply  = handle_form(sender_id, user_text)
+        reply = handle_form(sender_id, user_text)
         intent = "FORM_REGISTRATION"
         send_instagram_message(sender_id, reply)
         log_chat(sender_id, user_text, reply, intent)
@@ -241,7 +257,7 @@ def process_message(sender_id: str, user_text: str):
 
     # Trigger mulai form registrasi
     if text_lower in ["pesan", "order", "daftar", "registrasi", "beli"]:
-        reply  = handle_form(sender_id, user_text)
+        reply = handle_form(sender_id, user_text)
         intent = "START_REGISTRATION"
         send_instagram_message(sender_id, reply)
         log_chat(sender_id, user_text, reply, intent)
@@ -249,11 +265,13 @@ def process_message(sender_id: str, user_text: str):
 
     # Default: tanya ke Gemini AI
     try:
-        reply  = generate_ai_reply(user_text)
+        reply = generate_ai_reply(user_text)
         intent = "AI_GEMINI"
     except Exception as e:
         print(f"❌ Gemini error: {e}", flush=True)
-        reply  = "Maaf Kak, DynoMin sedang gangguan sesaat. Coba lagi beberapa saat ya! 🙏"
+        reply = (
+            "Maaf Kak, DynoMin sedang gangguan sesaat. Coba lagi beberapa saat ya! 🙏"
+        )
         intent = "AI_GEMINI"
 
     send_instagram_message(sender_id, reply)
@@ -263,8 +281,8 @@ def process_message(sender_id: str, user_text: str):
 # ─── 8. Webhook GET (Verifikasi Meta) ────────────────────────────────────────
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
-    mode      = request.args.get("hub.mode")
-    token     = request.args.get("hub.verify_token")
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
 
     if mode == "subscribe" and token == META_VERIFY_TOKEN:

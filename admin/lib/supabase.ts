@@ -5,7 +5,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Chatbot Types ────────────────────────────────────────────────────────────
 
 export type PilihanJawaban = {
   opsi: string;
@@ -57,5 +57,119 @@ export type AdminUser = {
   id: number;
   username: string;
   role: "superadmin" | "admin";
+  created_at: string;
+};
+
+// ─── POS / Invoice Types ──────────────────────────────────────────────────────
+
+export type RekeningInfo = {
+  bank: string;
+  no_rek: string;
+  atas_nama: string;
+};
+
+export type CompanyProfile = {
+  id: number;
+  nama_toko: string;
+  tagline: string | null;
+  logo_url: string | null;
+  alamat: string | null;
+  kota: string | null;
+  no_hp: string | null;
+  email: string | null;
+  instagram: string | null;
+  rekening: RekeningInfo[];
+  is_active: boolean;
+  created_at: string;
+};
+
+export type InvoiceType = {
+  id: number;
+  nama: string;
+  prefix: string;
+  deskripsi: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ItemType = {
+  id: number;
+  nama: string;
+  icon: string;
+  created_at: string;
+};
+
+export type Item = {
+  id: number;
+  item_type_id: number | null;
+  item_type?: ItemType;
+  nama: string;
+  deskripsi: string | null;
+  harga_normal: number;
+  harga_promo: number | null;
+  satuan: string;
+  gambar_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  stock?: Stock;
+};
+
+export type Stock = {
+  id: number;
+  item_id: number;
+  qty_available: number;
+  qty_sold: number;
+  qty_reserved: number;
+  updated_at: string;
+};
+
+export type Invoice = {
+  id: number;
+  invoice_no: string;
+  invoice_type_id: number | null;
+  invoice_type?: InvoiceType;
+  invoice_date: string;
+  due_date: string | null;
+  customer_name: string;
+  customer_contact: string | null;
+  customer_address: string | null;
+  customer_email: string | null;
+  subtotal: number;
+  discount: number;
+  dp_amount: number;
+  grand_total: number;
+  sisa_tagihan: number;
+  status_pembayaran: "UNPAID" | "DP" | "PAID" | "CANCELLED";
+  pesanan_id: number | null;
+  catatan: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  invoice_items?: InvoiceItem[];
+  payments?: Payment[];
+};
+
+export type InvoiceItem = {
+  id: number;
+  invoice_id: number;
+  item_id: number | null;
+  description: string;
+  qty: number;
+  satuan: string;
+  harga_satuan: number;
+  total_harga: number;
+  created_at: string;
+};
+
+export type Payment = {
+  id: number;
+  invoice_id: number;
+  tanggal_bayar: string;
+  jumlah: number;
+  metode: "Transfer" | "Cash" | "QRIS" | "Other";
+  tipe: "DP" | "Pelunasan" | "Full";
+  bukti_url: string | null;
+  catatan: string | null;
+  dicatat_oleh: string;
   created_at: string;
 };

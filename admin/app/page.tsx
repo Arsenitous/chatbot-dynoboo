@@ -3,305 +3,477 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUser } from "@/lib/supabase";
+import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUser, Invoice, Item } from "@/lib/supabase";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type Page = "dashboard" | "knowledge" | "workshops" | "pesanan" | "chatlogs" | "access";
+// ─── Import components ────────────────────────────────────────────────────────
+import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp } from "./components/ui";
+import KatalogPage from "./components/KatalogPage";
+import StokPage from "./components/StokPage";
+import InvoiceListPage from "./components/InvoiceListPage";
+import InvoiceFormPage from "./components/InvoiceFormPage";
+import InvoiceDetailPage from "./components/InvoiceDetailPage";
+import CompanyPage from "./components/CompanyPage";
+import AiAssistantPage from "./components/AiAssistantPage";
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
-const Icons = {
-  Dashboard: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
-  Brain: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" /><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" /></svg>,
-  Workshop: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>,
-  Orders: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" x2="21" y1="6" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>,
-  Chat: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
-  Lock: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>,
-  Plus: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" /></svg>,
-  Edit: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>,
-  Trash: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>,
-  Save: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>,
-  X: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" x2="6" y1="6" y2="18" /><line x1="6" x2="18" y1="6" y2="18" /></svg>,
-  Refresh: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>,
-  Sun: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>,
-  Moon: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>,
-  Logout: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>,
-  ChevDown: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>,
-  Check: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>,
-  Search: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" x2="16.65" y1="21" y2="16.65" /></svg>,
-  Key: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" /></svg>,
-  Eye: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>,
-};
+// ─── Types ─────────────────────────────────────────────────────────────────────
+type Page =
+  | "dashboard"
+  | "katalog" | "stok"
+  | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
+  | "knowledge" | "workshops" | "pesanan" | "chatlogs"
+  | "company" | "access" | "ai-assistant" | "manual";
 
-// ─── Custom Select ────────────────────────────────────────────────────────────
-type SelectOption = { value: string; label: string; color?: string };
-function CustomSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: SelectOption[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = options.find(o => o.value === value);
+// ─── Navigation Structure ──────────────────────────────────────────────────────
+const NAV_GROUPS = [
+  {
+    key: "MENU",
+    items: [{ id: "dashboard", label: "Dashboard", icon: <Icons.Dashboard /> }],
+  },
+  {
+    key: "PRODUK",
+    sub: [
+      { label: "Master", items: [{ id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> }] },
+      { label: "Stok", items: [{ id: "stok", label: "Stok & Kuota", icon: <Icons.BarChart /> }] },
+    ],
+  },
+  {
+    key: "INVOICE",
+    sub: [
+      {
+        label: "Transaksi",
+        items: [
+          { id: "invoice-list", label: "Daftar Invoice", icon: <Icons.Receipt /> },
+          { id: "invoice-form", label: "Buat Invoice", icon: <Icons.Plus /> },
+        ],
+      },
+      {
+        label: "Pengaturan",
+        items: [{ id: "invoice-types", label: "Tipe Invoice", icon: <Icons.FileText /> }],
+      },
+    ],
+  },
+  {
+    key: "CHATBOT",
+    sub: [
+      {
+        label: "Data Bot",
+        items: [
+          { id: "knowledge", label: "Knowledge Base", icon: <Icons.Brain /> },
+          { id: "workshops", label: "Workshops", icon: <Icons.Workshop /> },
+        ],
+      },
+      {
+        label: "Aktivitas",
+        items: [
+          { id: "pesanan", label: "Pesanan (Pre-order)", icon: <Icons.Orders /> },
+          { id: "chatlogs", label: "Chat Logs", icon: <Icons.Chat /> },
+        ],
+      },
+    ],
+  },
+  {
+    key: "PENGATURAN",
+    items: [
+      { id: "company", label: "Profil Toko", icon: <Icons.Building /> },
+      { id: "access", label: "Access Control", icon: <Icons.Lock /> },
+      { id: "ai-assistant", label: "AI Assistant", icon: <Icons.Bot /> },
+      { id: "manual", label: "Buku Panduan", icon: <Icons.Book /> },
+    ],
+  },
+];
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+function fmtDate(d: string) {
+  return new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
 
+// ─── InvoiceTypes page ─────────────────────────────────────────────────────────
+type InvoiceTypeRow = { id: number; nama: string; prefix: string; deskripsi: string | null; is_active: boolean };
+function InvoiceTypesPage() {
+  const [types, setTypes] = useState<InvoiceTypeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<InvoiceTypeRow | null>(null);
+  const [form, setForm] = useState({ nama: "", prefix: "", deskripsi: "", is_active: true });
+  const [saving, setSaving] = useState(false);
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/invoice-types"); setTypes(await r.json()); setLoading(false); }, []);
+  useEffect(() => { load(); }, [load]);
+  const openAdd = () => { setForm({ nama: "", prefix: "", deskripsi: "", is_active: true }); setAdding(true); setEditing(null); };
+  const openEdit = (t: InvoiceTypeRow) => { setForm({ nama: t.nama, prefix: t.prefix, deskripsi: t.deskripsi ?? "", is_active: t.is_active }); setEditing(t); setAdding(false); };
+  const save = async () => {
+    setSaving(true);
+    if (editing) await fetch(`/api/invoice-types/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    else await fetch("/api/invoice-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    setSaving(false); setAdding(false); setEditing(null); load();
+  };
+  const del = async (id: number) => { if (!confirm("Hapus tipe invoice ini?")) return; await fetch(`/api/invoice-types/${id}`, { method: "DELETE" }); load(); };
   return (
-    <div ref={ref} className="custom-select-wrapper">
-      <div className={`custom-select-trigger ${open ? "open" : ""}`} onClick={() => setOpen(v => !v)}>
-        <span style={{ color: selected?.color }}>{selected?.label ?? value}</span>
-        <span style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", color: "var(--text-muted)" }}>
-          <Icons.ChevDown />
-        </span>
+    <div className="animate-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Tipe Invoice</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola template jenis invoice (Workshop, Produk, Bouquet...)</p></div>
+        <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Tipe</button>
       </div>
-      {open && (
-        <div className="custom-select-dropdown">
-          {options.map(opt => (
-            <div
-              key={opt.value}
-              className={`custom-select-option ${opt.value === value ? "selected" : ""}`}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-            >
-              {opt.value === value && <Icons.Check />}
-              {opt.value !== value && <span style={{ width: 13 }} />}
-              <span style={{ color: opt.color }}>{opt.label}</span>
+      <div className="card" style={{ overflow: "hidden" }}>
+        {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
+          <table className="data-table">
+            <thead><tr><th>Nama</th><th>Prefix</th><th>Deskripsi</th><th>Contoh No.</th><th>Status</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+            <tbody>
+              {types.map(t => (
+                <tr key={t.id}>
+                  <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{t.nama}</td>
+                  <td><code style={{ background: "rgba(56,189,248,0.12)", padding: "2px 8px", borderRadius: 4, color: "#38bdf8", fontSize: 12 }}>{t.prefix}</code></td>
+                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{t.deskripsi ?? "—"}</td>
+                  <td><code style={{ fontSize: 11, color: "var(--text-secondary)" }}>DNB-{t.prefix}-2608-0001</code></td>
+                  <td><span className={`badge ${t.is_active ? "badge-active" : "badge-closed"}`}>{t.is_active ? "Aktif" : "Nonaktif"}</span></td>
+                  <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(t)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(t.id)}><Icons.Trash /></button></div></td>
+                </tr>
+              ))}
+              {types.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada tipe invoice</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {(adding || !!editing) && (
+        <Modal title={editing ? "Edit Tipe Invoice" : "Tambah Tipe Invoice"} onClose={() => { setAdding(false); setEditing(null); }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Nama Tipe" required><input className="input" placeholder="Invoice Workshop" value={form.nama} onChange={e => setForm(f => ({ ...f, nama: e.target.value }))} /></Field>
+            <Field label="Prefix (maks 5 huruf)" required><input className="input" placeholder="WSP" maxLength={5} style={{ textTransform: "uppercase" }} value={form.prefix} onChange={e => setForm(f => ({ ...f, prefix: e.target.value.toUpperCase() }))} /></Field>
+            <Field label="Deskripsi"><input className="input" placeholder="Untuk pembayaran workshop..." value={form.deskripsi} onChange={e => setForm(f => ({ ...f, deskripsi: e.target.value }))} /></Field>
+            <Field label="Status"><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div className={`toggle ${form.is_active ? "on" : ""}`} onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))} /><span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{form.is_active ? "Aktif" : "Nonaktif"}</span></div></Field>
+            {form.prefix && <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.2)", fontSize: 12, color: "#38bdf8" }}>Preview: <code>DNB-{form.prefix}-2608-0001</code></div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.nama || !form.prefix}><Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}</button>
+              <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
             </div>
-          ))}
-        </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-          <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>{title}</h3>
-          <button className="btn btn-secondary btn-sm btn-icon" onClick={onClose}><Icons.X /></button>
-        </div>
-        <div style={{ padding: 20 }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+// ─── Dashboard Stats (Grid Redesign) ───────────────────────────────────────────
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, color, bg, icon, sub }: { label: string; value: number; color: string; bg: string; icon: React.ReactNode; sub?: string }) {
-  return (
-    <div className="stat-card animate-in">
-      <div className="stat-icon" style={{ background: bg, boxShadow: `0 0 20px ${color}40` }}>
-        <span style={{ color }}>{icon}</span>
-      </div>
-      <div>
-        <p style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1 }}>{value}</p>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>{label}</p>
-        {sub && <p style={{ fontSize: 11, color, marginTop: 2 }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
+function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown) => void }) {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [pesanan, setPesanan] = useState<Pesanan[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
 
-// ─── Form Field ───────────────────────────────────────────────────────────────
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, letterSpacing: "0.03em" }}>
-        {label} {required && <span style={{ color: "#f472b6" }}>*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [invRes, pesRes, itemsRes] = await Promise.all([
+          fetch("/api/invoices"), fetch("/api/pesanan"), fetch("/api/items"),
+        ]);
+        if (invRes.ok) setInvoices(await invRes.json());
+        if (pesRes.ok) setPesanan(await pesRes.json());
+        if (itemsRes.ok) setItems(await itemsRes.json());
+      } catch { /* silent */ }
+      setLoading(false);
+    };
+    load();
+  }, []);
 
-// ─── Dashboard Page ───────────────────────────────────────────────────────────
-function DashboardPage({ stats }: { stats: { knowledge: number; workshops: number; pesanan: number; chatlogs: number } }) {
+  const totalPaidRevenue = invoices.filter(i => i.status_pembayaran === "PAID").reduce((s, i) => s + Number(i.grand_total), 0);
+  const totalUnpaidAmount = invoices.filter(i => ["UNPAID", "DP"].includes(i.status_pembayaran)).reduce((s, i) => s + Number(i.sisa_tagihan), 0);
+
+  const countPaid = invoices.filter(i => i.status_pembayaran === "PAID").length;
+  const countDP = invoices.filter(i => i.status_pembayaran === "DP").length;
+  const countUnpaid = invoices.filter(i => i.status_pembayaran === "UNPAID").length;
+  const countCancelled = invoices.filter(i => i.status_pembayaran === "CANCELLED").length;
+
+  const lowStockItems = items.filter(i => i.is_active && (i.stock?.qty_available ?? 0) <= 3);
+
   return (
     <div className="animate-in">
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Dashboard</h2>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Ringkasan data DynoBoo chatbot</p>
-      </div>
-      <div className="stat-cards-sticky">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-          <StatCard label="Knowledge Base" value={stats.knowledge} color="#a78bfa" bg="rgba(124,58,237,0.15)" icon={<Icons.Brain />} sub="Entri QnA aktif" />
-          <StatCard label="Workshops" value={stats.workshops} color="#f472b6" bg="rgba(236,72,153,0.15)" icon={<Icons.Workshop />} sub="Event terdaftar" />
-          <StatCard label="Pesanan Masuk" value={stats.pesanan} color="#22d3ee" bg="rgba(6,182,212,0.15)" icon={<Icons.Orders />} sub="Via form DM" />
-          <StatCard label="Chat Logs" value={stats.chatlogs} color="#34d399" bg="rgba(16,185,129,0.15)" icon={<Icons.Chat />} sub="200 log terbaru" />
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 700 }} className="gradient-text">Dashboard Semi-POS</h2>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Ringkasan performa toko & transaksi DynoBoo</p>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", background: "var(--bg-card)", padding: "6px 14px", borderRadius: 8, border: "1px solid var(--border)" }}>
+          🗓️ {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
       </div>
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: "var(--text-primary)" }}>ℹ️ Panduan Cepat</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { icon: "🧠", title: "Knowledge Base", desc: "Kelola QnA dan pilihan jawaban yang digunakan oleh DynoMin." },
-            { icon: "📅", title: "Workshops", desc: "Tambah atau ubah event workshop yang aktif, akan otomatis dibaca oleh bot." },
-            { icon: "📦", title: "Pesanan", desc: "Lihat pesanan yang masuk dari form otomatis via Instagram DM." },
-            { icon: "💬", title: "Chat Logs", desc: "Monitor percakapan antara pelanggan dan DynoMin." },
-            { icon: "🔐", title: "Access Control", desc: "Lihat informasi akun SuperAdmin yang sedang aktif." },
-          ].map(item => (
-            <div key={item.title} style={{ display: "flex", gap: 12, padding: "10px 14px", borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)" }}>
-              <span style={{ fontSize: 18 }}>{item.icon}</span>
-              <div>
-                <p style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{item.title}</p>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{item.desc}</p>
+
+      {/* Top Grid - 4 KPI Cards */}
+      <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
+        <StatCard label="Revenue (PAID)" value={loading ? "—" : fmtRp(totalPaidRevenue)} color="#10b981" bg="rgba(16,185,129,0.15)" icon={<Icons.TrendingUp />} sub="Total dana masuk" />
+        <StatCard label="Total Transaksi" value={loading ? "—" : invoices.length} color="#38bdf8" bg="rgba(56,189,248,0.15)" icon={<Icons.Receipt />} sub={`${countPaid} lunas, ${countUnpaid} belum`} />
+        <StatCard label="Katalog Produk" value={loading ? "—" : items.length} color="#06b6d4" bg="rgba(6,182,212,0.15)" icon={<Icons.Package />} sub={`${lowStockItems.length} stok kritis`} />
+        <StatCard label="Pesanan Pre-Order" value={loading ? "—" : pesanan.length} color="#f59e0b" bg="rgba(245,158,11,0.15)" icon={<Icons.Orders />} sub="dari chatbot" />
+      </div>
+
+      {/* Main 2-Column Grid */}
+      <div className="dashboard-grid" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 20 }}>
+        
+        {/* Left Column (60%) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          
+          {/* Quick Actions Widget - Neat compact buttons */}
+          <div className="card" style={{ padding: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12 }}>Aksi Cepat POS</p>
+            <div className="pos-actions-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
+              <button className="btn btn-primary" style={{ padding: "8px 12px", justifyContent: "center", fontSize: 12, height: 38 }} onClick={() => onNavigate("invoice-form")}>
+                <Icons.Plus /> <span>Buat Invoice</span>
+              </button>
+              <button className="btn btn-secondary" style={{ padding: "8px 12px", justifyContent: "center", fontSize: 12, height: 38 }} onClick={() => onNavigate("katalog")}>
+                <Icons.Package /> <span>+ Produk</span>
+              </button>
+              <button className="btn btn-secondary" style={{ padding: "8px 12px", justifyContent: "center", fontSize: 12, height: 38 }} onClick={() => onNavigate("stok")}>
+                <Icons.BarChart /> <span>Cek Stok</span>
+              </button>
+              <button className="btn btn-secondary" style={{ padding: "8px 12px", justifyContent: "center", fontSize: 12, height: 38 }} onClick={() => onNavigate("ai-assistant")}>
+                <span style={{ fontSize: 14 }}>🦖</span> <span>Tanya AI</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Invoices Table Widget */}
+          <div className="card" style={{ overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Transaksi Invoice Terbaru</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("invoice-list")}>Semua Invoice →</button>
+            </div>
+            
+            {invoices.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                Belum ada transaksi invoice recorded.
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>No Invoice</th>
+                      <th>Customer</th>
+                      <th>Total</th>
+                      <th>Status</th>
+                      <th style={{ width: 60 }}>Lihat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.slice(0, 5).map(inv => (
+                      <tr key={inv.id} style={{ cursor: "pointer" }} onClick={() => onNavigate("invoice-list")}>
+                        <td><span style={{ fontFamily: "monospace", fontSize: 11, color: "#38bdf8", fontWeight: 600 }}>{inv.invoice_no}</span></td>
+                        <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{inv.customer_name}</td>
+                        <td style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmtRp(inv.grand_total)}</td>
+                        <td><InvoiceStatusBadge status={inv.status_pembayaran} /></td>
+                        <td><button className="btn btn-secondary btn-sm btn-icon"><Icons.Eye /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Right Column (40%) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          
+          {/* Stok Kritis Alert Widget */}
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Stok & Kuota Kritis (≤ 3)</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("stok")}>Restock →</button>
+            </div>
+            
+            {lowStockItems.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "14px 0", color: "#34d399", fontSize: 12 }}>
+                ✓ Semua stok item dalam kondisi aman!
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {lowStockItems.slice(0, 3).map(item => (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: 12, color: "var(--text-primary)" }}>{item.nama}</p>
+                      <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Sisa: <strong style={{ color: "#f87171" }}>{item.stock?.qty_available ?? 0} {item.satuan}</strong></p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("stok")}>Update</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pre-Orders Terbaru (Chatbot) */}
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Pesanan Pre-Order Chatbot</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("pesanan")}>Semua →</button>
+            </div>
+
+            {pesanan.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "14px 0", color: "var(--text-muted)", fontSize: 12 }}>
+                Belum ada pesanan pre-order masuk.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {pesanan.slice(0, 2).map(p => (
+                  <div key={p.id} style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 2 }}>
+                      <p style={{ fontWeight: 600, fontSize: 12, color: "var(--text-primary)" }}>{p.nama}</p>
+                      <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{fmtDate(p.created_at)}</span>
+                    </div>
+                    <p style={{ fontSize: 11, color: "#38bdf8", marginBottom: 6 }}>🛒 {p.produk}</p>
+                    <button className="btn btn-primary btn-sm" style={{ width: "100%", justifyContent: "center" }} onClick={() => onNavigate("invoice-form", p)}>
+                      <Icons.Receipt /> Process to Invoice
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Status Pembayaran breakdown (Moved below Chatbot pre-orders) */}
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Status Pembayaran</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("invoice-list")}>Detail →</button>
+            </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+              <div style={{ padding: 10, borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="badge badge-paid" style={{ fontSize: 10 }}>PAID</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#10b981" }}>{countPaid}</span>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{fmtRp(totalPaidRevenue)}</p>
+              </div>
+
+              <div style={{ padding: 10, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="badge badge-dp" style={{ fontSize: 10 }}>DP</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#f59e0b" }}>{countDP}</span>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Pelunasan</p>
+              </div>
+
+              <div style={{ padding: 10, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="badge badge-unpaid" style={{ fontSize: 10 }}>UNPAID</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#ef4444" }}>{countUnpaid}</span>
+                </div>
+                <p style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>{fmtRp(totalUnpaidAmount)}</p>
+              </div>
+
+              <div style={{ padding: 10, borderRadius: 8, background: "rgba(100,116,139,0.08)", border: "1px solid rgba(100,116,139,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span className="badge badge-cancelled" style={{ fontSize: 10 }}>CANCELLED</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#94a3b8" }}>{countCancelled}</span>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Batal</p>
               </div>
             </div>
-          ))}
+          </div>
+
         </div>
+
       </div>
     </div>
   );
 }
 
-// ─── Knowledge Base Page ──────────────────────────────────────────────────────
+// ─── Knowledge, Workshops, Pesanan, ChatLogs, Access pages ────────────────────
+
 function KnowledgePage() {
-  const [items, setItems] = useState<KnowledgeBase[]>([]);
+  const [knowledges, setKnowledges] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<KnowledgeBase | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { keywords: "", jawaban_utama: "", keterangan: "", pilihan_jawaban_raw: "[]" };
+  const [search, setSearch] = useState("");
+  const emptyForm = { keywords: "", jawaban_utama: "", pilihan_jawaban: [] as PilihanJawaban[], keterangan: "" };
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = await fetch("/api/knowledge");
-    setItems(await r.json());
+    setKnowledges(await r.json());
     setLoading(false);
   }, []);
-
   useEffect(() => { load(); }, [load]);
 
   const openAdd = () => { setForm(emptyForm); setAdding(true); setEditing(null); };
-  const openEdit = (item: KnowledgeBase) => {
-    setForm({ keywords: item.keywords, jawaban_utama: item.jawaban_utama, keterangan: item.keterangan ?? "", pilihan_jawaban_raw: item.pilihan_jawaban ? JSON.stringify(item.pilihan_jawaban, null, 2) : "[]" });
-    setEditing(item); setAdding(false);
+  const openEdit = (k: KnowledgeBase) => {
+    setForm({ keywords: k.keywords, jawaban_utama: k.jawaban_utama, pilihan_jawaban: k.pilihan_jawaban ?? [], keterangan: k.keterangan ?? "" });
+    setEditing(k); setAdding(false);
   };
-
-  let parsedPilihan: PilihanJawaban[] = [];
-  try { parsedPilihan = JSON.parse(form.pilihan_jawaban_raw) || []; } catch { /* noop */ }
-
-  const addPilihan = () => {
-    const arr = [...parsedPilihan, { opsi: "", jawaban: "" }];
-    setForm({ ...form, pilihan_jawaban_raw: JSON.stringify(arr, null, 2) });
-  };
-  const updatePilihan = (i: number, field: "opsi" | "jawaban", v: string) => {
-    const arr = [...parsedPilihan]; arr[i][field] = v;
-    setForm({ ...form, pilihan_jawaban_raw: JSON.stringify(arr, null, 2) });
-  };
-  const removePilihan = (i: number) => {
-    const arr = parsedPilihan.filter((_, idx) => idx !== i);
-    setForm({ ...form, pilihan_jawaban_raw: JSON.stringify(arr, null, 2) });
-  };
-
   const save = async () => {
     setSaving(true);
-    const payload = {
-      keywords: form.keywords, jawaban_utama: form.jawaban_utama,
-      keterangan: form.keterangan || null,
-      pilihan_jawaban: parsedPilihan.length > 0 ? parsedPilihan : null,
-    };
+    const payload = { ...form, pilihan_jawaban: form.pilihan_jawaban.length ? form.pilihan_jawaban : null, edited_by: "superadmin" };
     if (editing) await fetch(`/api/knowledge/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     else await fetch("/api/knowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setSaving(false); setAdding(false); setEditing(null); load();
   };
+  const del = async (id: number) => { if (!confirm("Hapus?")) return; await fetch(`/api/knowledge/${id}`, { method: "DELETE" }); load(); };
+  const addChoice = () => setForm(f => ({ ...f, pilihan_jawaban: [...f.pilihan_jawaban, { opsi: "", jawaban: "" }] }));
+  const updateChoice = (i: number, field: "opsi" | "jawaban", val: string) => setForm(f => ({ ...f, pilihan_jawaban: f.pilihan_jawaban.map((p, idx) => idx === i ? { ...p, [field]: val } : p) }));
+  const removeChoice = (i: number) => setForm(f => ({ ...f, pilihan_jawaban: f.pilihan_jawaban.filter((_, idx) => idx !== i) }));
 
-  const del = async (id: number) => {
-    if (!confirm("Hapus entri ini?")) return;
-    await fetch(`/api/knowledge/${id}`, { method: "DELETE" }); load();
-  };
+  const filtered = knowledges.filter(k => !search || k.keywords.toLowerCase().includes(search.toLowerCase()) || k.jawaban_utama.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Knowledge Base</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{items.length} entri QnA terdaftar</p>
-        </div>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Knowledge Base</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{knowledges.length} entri tersimpan</p></div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Entri</button>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button>
         </div>
+      </div>
+      <div style={{ position: "relative", marginBottom: 16 }}>
+        <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
+        <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari keyword atau jawaban..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
-        {loading ? (
-          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 48 }} />)}
+        {loading ? <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52 }} />)}</div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead><tr><th>#</th><th>Keywords</th><th>Jawaban Utama</th><th>Pilihan</th><th>Catatan</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+              <tbody>
+                {filtered.map(k => (
+                  <tr key={k.id}>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.id}</td>
+                    <td><div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{k.keywords.split(",").map(kw => <span key={kw} className="badge badge-form" style={{ fontSize: 10 }}>{kw.trim()}</span>)}</div></td>
+                    <td style={{ maxWidth: 300 }}><p style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{k.jawaban_utama}</p></td>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.pilihan_jawaban?.length ?? 0} opsi</td>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.keterangan ?? "—"}</td>
+                    <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(k)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(k.id)}><Icons.Trash /></button></div></td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada data</td></tr>}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th style={{ width: 44 }}>#</th>
-              <th style={{ width: "25%" }}>Keywords</th>
-              <th>Jawaban Utama</th>
-              <th style={{ width: 90 }}>Pilihan</th>
-              <th style={{ width: 90 }}>Aksi</th>
-            </tr></thead>
-            <tbody>
-              {items.map(item => (
-                <tr key={item.id}>
-                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{item.id}</td>
-                  <td>
-                    <span style={{ color: "#a78bfa", fontWeight: 500, fontSize: 13 }}>{item.keywords}</span>
-                    {item.keterangan && <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontStyle: "italic" }}>{item.keterangan}</p>}
-                    <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>👤 Edited by: <span style={{ color: "var(--text-secondary)" }}>{item.edited_by ?? "superadmin"}</span></p>
-                  </td>
-                  <td style={{ maxWidth: 320 }}>
-                    <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {item.jawaban_utama}
-                    </p>
-                  </td>
-                  <td>
-                    {item.pilihan_jawaban?.length ? <span className="badge badge-ai">{item.pilihan_jawaban.length} opsi</span> : <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(item)}><Icons.Edit /></button>
-                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(item.id)}><Icons.Trash /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>Belum ada data knowledge base</td></tr>}
-            </tbody>
-          </table>
         )}
       </div>
-
       {(adding || !!editing) && (
-        <Modal title={editing ? "Edit Knowledge Base" : "Tambah Knowledge Base"} onClose={() => { setAdding(false); setEditing(null); }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Field label="Keywords / Topik" required><input className="input" placeholder="Mau nanya harga, harga produk..." value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} /></Field>
-            <Field label="Jawaban Utama" required><textarea className="input" rows={4} placeholder="Jawaban default yang diberikan bot..." value={form.jawaban_utama} onChange={e => setForm({ ...form, jawaban_utama: e.target.value })} /></Field>
-            <Field label="Keterangan (opsional)"><input className="input" placeholder="Catatan tambahan konteks..." value={form.keterangan} onChange={e => setForm({ ...form, keterangan: e.target.value })} /></Field>
+        <Modal title={editing ? "Edit Knowledge" : "Tambah Knowledge"} onClose={() => { setAdding(false); setEditing(null); }} wide>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Keywords (pisah dengan koma)" required><input className="input" placeholder="harga, biaya, berapa harga..." value={form.keywords} onChange={e => setForm(f => ({ ...f, keywords: e.target.value }))} /></Field>
+            <Field label="Jawaban Utama" required><textarea className="input" rows={4} value={form.jawaban_utama} onChange={e => setForm(f => ({ ...f, jawaban_utama: e.target.value }))} /></Field>
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Pilihan Jawaban (opsional)</label>
-                <button className="btn btn-secondary btn-sm" onClick={addPilihan}><Icons.Plus /> Tambah Opsi</button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Pilihan Jawaban (Opsional)</label>
+                <button className="btn btn-secondary btn-sm" onClick={addChoice}><Icons.Plus /> Tambah Opsi</button>
               </div>
-              {parsedPilihan.length === 0 ? (
-                <p style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>Tidak ada pilihan — bot hanya balas dengan jawaban utama.</p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {parsedPilihan.map((p, i) => (
-                    <div key={i} style={{ padding: 12, borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 20 }}>#{i + 1}</span>
-                        <input className="input" style={{ flex: 1 }} placeholder="Label opsi (contoh: Workshop)" value={p.opsi} onChange={e => updatePilihan(i, "opsi", e.target.value)} />
-                        <button className="btn btn-danger btn-sm btn-icon" onClick={() => removePilihan(i)}><Icons.Trash /></button>
-                      </div>
-                      <textarea className="input" rows={2} placeholder="Jawaban jika user pilih opsi ini..." value={p.jawaban} onChange={e => updatePilihan(i, "jawaban", e.target.value)} />
-                    </div>
-                  ))}
+              {form.pilihan_jawaban.map((p, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input className="input" style={{ width: 120 }} placeholder="Label opsi" value={p.opsi} onChange={e => updateChoice(i, "opsi", e.target.value)} />
+                  <input className="input" placeholder="Jawaban untuk opsi ini..." value={p.jawaban} onChange={e => updateChoice(i, "jawaban", e.target.value)} />
+                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeChoice(i)}><Icons.Trash /></button>
                 </div>
-              )}
+              ))}
             </div>
-            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.keywords || !form.jawaban_utama}>
-                <Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}
-              </button>
+            <Field label="Catatan Internal"><input className="input" placeholder="Catatan untuk admin..." value={form.keterangan} onChange={e => setForm(f => ({ ...f, keterangan: e.target.value }))} /></Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.keywords || !form.jawaban_utama}><Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}</button>
               <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
             </div>
           </div>
@@ -311,121 +483,71 @@ function KnowledgePage() {
   );
 }
 
-// ─── Workshops Page ───────────────────────────────────────────────────────────
-const STATUS_OPTIONS: SelectOption[] = [
-  { value: "ACTIVE", label: "🟢 ACTIVE", color: "#34d399" },
-  { value: "UPCOMING", label: "🟡 UPCOMING", color: "#fbbf24" },
-  { value: "CLOSED", label: "⚪ CLOSED", color: "#94a3b8" },
-];
 function WorkshopsPage() {
-  const [items, setItems] = useState<Workshop[]>([]);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Workshop | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { nama_workshop: "", tanggal: "", harga_promo: "", harga_normal: "", fasilitas: "", status: "ACTIVE" };
+  const emptyForm = { nama_workshop: "", tanggal: "", harga_normal: "", harga_promo: "", fasilitas: "", status: "ACTIVE" };
   const [form, setForm] = useState(emptyForm);
+  const STATUS_OPTS = [{ value: "ACTIVE", label: "✓ Aktif", color: "#34d399" }, { value: "UPCOMING", label: "◷ Upcoming", color: "#fbbf24" }, { value: "CLOSED", label: "✕ Tutup", color: "#94a3b8" }];
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const r = await fetch("/api/workshops");
-    setItems(await r.json());
-    setLoading(false);
-  }, []);
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/workshops"); setWorkshops(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
-
   const openAdd = () => { setForm(emptyForm); setAdding(true); setEditing(null); };
-  const openEdit = (w: Workshop) => {
-    setForm({ nama_workshop: w.nama_workshop, tanggal: w.tanggal, harga_promo: w.harga_promo ?? "", harga_normal: w.harga_normal ?? "", fasilitas: w.fasilitas ?? "", status: w.status });
-    setEditing(w); setAdding(false);
-  };
+  const openEdit = (w: Workshop) => { setForm({ nama_workshop: w.nama_workshop, tanggal: w.tanggal, harga_normal: w.harga_normal ?? "", harga_promo: w.harga_promo ?? "", fasilitas: w.fasilitas ?? "", status: w.status }); setEditing(w); setAdding(false); };
   const save = async () => {
     setSaving(true);
-    const payload = { ...form, harga_promo: form.harga_promo || null, harga_normal: form.harga_normal || null, fasilitas: form.fasilitas || null };
+    const payload = { ...form, edited_by: "superadmin" };
     if (editing) await fetch(`/api/workshops/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     else await fetch("/api/workshops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => {
-    if (!confirm("Hapus workshop ini?")) return;
-    await fetch(`/api/workshops/${id}`, { method: "DELETE" }); load();
-  };
-
-  const statusBadge = (s: string) => {
-    if (s === "ACTIVE") return <span className="badge badge-active">● Active</span>;
-    if (s === "UPCOMING") return <span className="badge badge-upcoming">◐ Upcoming</span>;
-    return <span className="badge badge-closed">○ Closed</span>;
-  };
+  const del = async (id: number) => { if (!confirm("Hapus?")) return; await fetch(`/api/workshops/${id}`, { method: "DELETE" }); load(); };
 
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Workshops</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{items.length} workshop terdaftar</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Workshop</button>
-        </div>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Workshops</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{workshops.length} workshop terdaftar</p></div>
+        <div style={{ display: "flex", gap: 8 }}><button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button><button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button></div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
-        {loading ? (
-          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>{[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 56 }} />)}</div>
-        ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th style={{ width: 44 }}>#</th>
-              <th>Nama Workshop</th>
-              <th>Tanggal</th>
-              <th>Harga Promo</th>
-              <th>Harga Normal</th>
-              <th>Status</th>
-              <th style={{ width: 90 }}>Aksi</th>
-            </tr></thead>
-            <tbody>
-              {items.map(w => (
-                <tr key={w.id}>
-                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{w.id}</td>
-                  <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                    {w.nama_workshop}
-                    <p style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400, marginTop: 4 }}>👤 Edited by: <span style={{ color: "var(--text-secondary)" }}>{w.edited_by ?? "superadmin"}</span></p>
-                  </td>
-                  <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{w.tanggal}</td>
-                  <td style={{ color: "#34d399", fontWeight: 600 }}>{w.harga_promo ?? "—"}</td>
-                  <td style={{ color: "var(--text-secondary)" }}>{w.harga_normal ?? "—"}</td>
-                  <td>{statusBadge(w.status)}</td>
-                  <td><div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(w)}><Icons.Edit /></button>
-                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(w.id)}><Icons.Trash /></button>
-                  </div></td>
-                </tr>
-              ))}
-              {items.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>Belum ada workshop</td></tr>}
-            </tbody>
-          </table>
+        {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+              <tbody>
+                {workshops.map(w => (
+                  <tr key={w.id}>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{w.id}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{w.nama_workshop}</td>
+                    <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>{fmtDate(w.tanggal)}</td>
+                    <td>{w.harga_normal ? <span style={{ fontWeight: 600 }}>{w.harga_normal}</span> : "—"}</td>
+                    <td>{w.harga_promo ? <span style={{ color: "#34d399", fontWeight: 600 }}>{w.harga_promo}</span> : "—"}</td>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12, maxWidth: 200 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{w.fasilitas ?? "—"}</span></td>
+                    <td><span className={`badge ${w.status === "ACTIVE" ? "badge-active" : w.status === "UPCOMING" ? "badge-upcoming" : "badge-closed"}`}>{w.status}</span></td>
+                    <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(w)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(w.id)}><Icons.Trash /></button></div></td>
+                  </tr>
+                ))}
+                {workshops.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada workshop</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-
       {(adding || !!editing) && (
         <Modal title={editing ? "Edit Workshop" : "Tambah Workshop"} onClose={() => { setAdding(false); setEditing(null); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Nama Workshop" required><input className="input" placeholder="Penguin Beading Workshop" value={form.nama_workshop} onChange={e => setForm({ ...form, nama_workshop: e.target.value })} /></Field>
-            <Field label="Tanggal" required><input className="input" placeholder="Minggu, 5 Juli 2026 (Pukul 10:00 WIB)" value={form.tanggal} onChange={e => setForm({ ...form, tanggal: e.target.value })} /></Field>
+            <Field label="Nama Workshop" required><input className="input" placeholder="Workshop Animal Pot - Juli 2026" value={form.nama_workshop} onChange={e => setForm(f => ({ ...f, nama_workshop: e.target.value }))} /></Field>
+            <Field label="Tanggal" required><input className="input" type="date" value={form.tanggal} onChange={e => setForm(f => ({ ...f, tanggal: e.target.value }))} /></Field>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Harga Promo"><input className="input" placeholder="Rp60.000" value={form.harga_promo} onChange={e => setForm({ ...form, harga_promo: e.target.value })} /></Field>
-              <Field label="Harga Normal"><input className="input" placeholder="Rp65.000" value={form.harga_normal} onChange={e => setForm({ ...form, harga_normal: e.target.value })} /></Field>
+              <Field label="Harga Normal"><input className="input" placeholder="Rp 100.000" value={form.harga_normal} onChange={e => setForm(f => ({ ...f, harga_normal: e.target.value }))} /></Field>
+              <Field label="Harga Promo"><input className="input" placeholder="Rp 90.000" value={form.harga_promo} onChange={e => setForm(f => ({ ...f, harga_promo: e.target.value }))} /></Field>
             </div>
-            <Field label="Fasilitas"><textarea className="input" rows={2} placeholder="Bahan dan alat, tutor, konsumsi, e-certificate..." value={form.fasilitas} onChange={e => setForm({ ...form, fasilitas: e.target.value })} /></Field>
-            <Field label="Status">
-              <CustomSelect value={form.status} onChange={v => setForm({ ...form, status: v })} options={STATUS_OPTIONS} />
-            </Field>
-            <div style={{ display: "flex", gap: 8, paddingTop: 6 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.nama_workshop || !form.tanggal}>
-                <Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}
-              </button>
-              <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
-            </div>
+            <Field label="Fasilitas"><textarea className="input" rows={3} placeholder="Alat rajut, yarn, pola, sertifikat..." value={form.fasilitas} onChange={e => setForm(f => ({ ...f, fasilitas: e.target.value }))} /></Field>
+            <Field label="Status"><CustomSelect value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} options={STATUS_OPTS} /></Field>
+            <div style={{ display: "flex", gap: 8 }}><button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving}><Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}</button><button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button></div>
           </div>
         </Modal>
       )}
@@ -433,336 +555,90 @@ function WorkshopsPage() {
   );
 }
 
-// ─── Pesanan Page ─────────────────────────────────────────────────────────────
-function PesananPage() {
-  const [items, setItems] = useState<Pesanan[]>([]);
+function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesanan: (p: Pesanan) => void }) {
+  const [pesanan, setPesanan] = useState<Pesanan[]>([]);
   const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan"); setItems(await r.json()); setLoading(false); }, []);
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan"); setPesanan(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
-  const fmt = (d: string) => new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Pesanan</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{items.length} pesanan masuk via Instagram DM</p>
-        </div>
-        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Pesanan (Pre-order)</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Dari chatbot Instagram — klik "Buat Invoice" untuk memproses</p></div>
+        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
-        {loading ? (
-          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>{[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 48 }} />)}</div>
-        ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th style={{ width: 44 }}>#</th>
-              <th>Nama</th>
-              <th>Produk/Workshop</th>
-              <th>No. HP</th>
-              <th>Alamat</th>
-              <th>Waktu</th>
-            </tr></thead>
-            <tbody>
-              {items.map(p => (
-                <tr key={p.id}>
-                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{p.id}</td>
-                  <td>
-                    <p style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.nama}</p>
-                    <p style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace", marginTop: 2 }}>{p.sender_id}</p>
-                  </td>
-                  <td><span className="badge badge-form">{p.produk}</span></td>
-                  <td style={{ color: "#22d3ee", fontFamily: "monospace", fontSize: 12 }}>{p.no_hp}</td>
-                  <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 180 }}>{p.alamat}</td>
-                  <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmt(p.created_at)}</td>
-                </tr>
-              ))}
-              {items.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>📭 Belum ada pesanan masuk</td></tr>}
-            </tbody>
-          </table>
+        {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th><th style={{ width: 130 }}>Aksi</th></tr></thead>
+              <tbody>
+                {pesanan.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{p.id}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.nama}</td>
+                    <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{p.produk}</td>
+                    <td style={{ fontSize: 12, fontFamily: "monospace" }}>{p.no_hp}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 160 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{p.alamat}</span></td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(p.created_at)}</td>
+                    <td><button className="btn btn-primary btn-sm" onClick={() => onCreateInvoiceFromPesanan(p)}><Icons.Receipt /> Buat Invoice</button></td>
+                  </tr>
+                ))}
+                {pesanan.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada pesanan</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// ─── Chat Logs Page ───────────────────────────────────────────────────────────
 function ChatLogsPage() {
-  const [items, setItems] = useState<ChatLog[]>([]);
+  const [logs, setLogs] = useState<ChatLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<ChatLog | null>(null);
   const [search, setSearch] = useState("");
-  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/chat-logs"); setItems(await r.json()); setLoading(false); }, []);
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/chat-logs"); setLogs(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
-  const fmt = (d: string) => new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  const filtered = items.filter(i => !search || i.user_message.toLowerCase().includes(search.toLowerCase()) || i.sender_id.includes(search));
-
-  const intentBadge = (intent: string) => {
-    if (intent === "AI_GEMINI") return <span className="badge badge-ai">🤖 AI</span>;
-    if (intent === "FORM_REGISTRATION") return <span className="badge badge-form">📋 Form</span>;
-    return <span className="badge badge-start">🚀 Start</span>;
-  };
-
+  const filtered = logs.filter(l => !search || l.user_message.toLowerCase().includes(search.toLowerCase()) || l.sender_id.includes(search));
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Chat Logs</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{filtered.length} dari {items.length} log (200 terbaru)</p>
-        </div>
-        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Chat Logs</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{logs.length} percakapan tercatat</p></div>
+        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
       </div>
       <div style={{ position: "relative", marginBottom: 16 }}>
         <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
         <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari pesan atau sender ID..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
-      {loading ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={{ height: 80 }} />)}</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map(item => (
-            <div key={item.id} className="card animate-in" style={{ padding: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {intentBadge(item.intent)}
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>{item.sender_id}</span>
-                </div>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmt(item.created_at)}</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <p style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 5 }}>User</p>
-                  <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{item.user_message}</p>
-                </div>
-                <div style={{ borderLeft: "1px solid var(--border)", paddingLeft: 12 }}>
-                  <p style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 5 }}>DynoMin</p>
-                  <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.bot_response}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && <div style={{ textAlign: "center", padding: 64, color: "var(--text-muted)" }}>💬 Tidak ada log ditemukan</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Access Control Page ──────────────────────────────────────────────────────
-const ROLE_OPTIONS: SelectOption[] = [
-  { value: "superadmin", label: "👑 SuperAdmin", color: "#a78bfa" },
-  { value: "admin", label: "🛡️ Admin", color: "#22d3ee" },
-];
-
-function AccessPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<AdminUser | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const emptyForm = { username: "", password: "", role: "admin" };
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState("");
-
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin-users");
-      if (res.ok) {
-        setUsers(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
-
-  const openAdd = () => {
-    setForm(emptyForm);
-    setError("");
-    setAdding(true);
-    setEditing(null);
-  };
-
-  const openEdit = (u: AdminUser) => {
-    setForm({ username: u.username, password: "", role: u.role });
-    setError("");
-    setEditing(u);
-    setAdding(false);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError("");
-    try {
-      if (editing) {
-        const res = await fetch(`/api/admin-users/${editing.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: form.role, password: form.password || undefined }),
-        });
-        if (res.ok) {
-          setEditing(null);
-          loadUsers();
-        } else {
-          const err = await res.json();
-          setError(err.error || "Gagal mengubah user");
-        }
-      } else {
-        const res = await fetch("/api/admin-users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        if (res.ok) {
-          setAdding(false);
-          loadUsers();
-        } else {
-          const err = await res.json();
-          setError(err.error || "Gagal membuat user");
-        }
-      }
-    } catch (e) {
-      setError("Terjadi kesalahan koneksi");
-    }
-    setSaving(false);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Hapus user ini?")) return;
-    try {
-      const res = await fetch(`/api/admin-users/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        loadUsers();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Gagal menghapus user");
-      }
-    } catch (e) {
-      alert("Terjadi kesalahan koneksi");
-    }
-  };
-
-  return (
-    <div className="animate-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Access Control</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola akun yang memiliki akses ke Admin Panel</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={loadUsers}><Icons.Refresh /> Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah User</button>
-        </div>
-      </div>
-
       <div className="card" style={{ overflow: "hidden" }}>
-        {loading ? (
-          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-            {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 48 }} />)}
+        {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead><tr><th>Sender</th><th>Pesan User</th><th>Intent</th><th>Waktu</th><th style={{ width: 60 }}>Detail</th></tr></thead>
+              <tbody>
+                {filtered.map(l => (
+                  <tr key={l.id}>
+                    <td><code style={{ fontSize: 11, color: "#22d3ee" }}>{l.sender_id.slice(0, 16)}...</code></td>
+                    <td style={{ maxWidth: 280, fontSize: 13 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{l.user_message}</span></td>
+                    <td><span className={`badge ${l.intent === "AI_GEMINI" ? "badge-ai" : l.intent === "FORM_REGISTRATION" ? "badge-form" : "badge-start"}`}>{l.intent}</span></td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(l.created_at)}</td>
+                    <td><button className="btn btn-secondary btn-sm btn-icon" onClick={() => setSelected(l)}><Icons.Eye /></button></td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada log</td></tr>}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: 44 }}>#</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Dibuat Pada</th>
-                <th style={{ width: 90 }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{u.id}</td>
-                  <td>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{u.username}</span>
-                  </td>
-                  <td>
-                    {u.role === "superadmin" ? (
-                      <span className="badge badge-active" style={{ background: "rgba(124,58,237,0.12)", color: "#a78bfa", borderColor: "rgba(124,58,237,0.25)" }}>👑 SuperAdmin</span>
-                    ) : (
-                      <span className="badge badge-form">🛡️ Admin</span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    {new Date(u.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(u)}><Icons.Edit /></button>
-                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => handleDelete(u.id)}><Icons.Trash /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>
-                    Belum ada user di database Supabase. Silakan kunjungi /api/setup sekali untuk inisialisasi SuperAdmin.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         )}
       </div>
-
-      {(adding || !!editing) && (
-        <Modal title={editing ? `Edit User: ${editing.username}` : "Tambah User Baru"} onClose={() => { setAdding(false); setEditing(null); }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {!editing && (
-              <Field label="Username" required>
-                <input
-                  className="input"
-                  placeholder="Masukkan username..."
-                  value={form.username}
-                  onChange={e => setForm({ ...form, username: e.target.value })}
-                />
-              </Field>
-            )}
-
-            <Field label={editing ? "Password Baru (kosongkan jika tidak diubah)" : "Password"} required={!editing}>
-              <input
-                type="password"
-                className="input"
-                placeholder={editing ? "••••••••" : "Masukkan password..."}
-                value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-              />
-            </Field>
-
-            <Field label="Role" required>
-              <CustomSelect
-                value={form.role}
-                onChange={v => setForm({ ...form, role: v })}
-                options={ROLE_OPTIONS}
-              />
-            </Field>
-
-            {error && (
-              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg" style={{ padding: "8px 12px" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                {error}
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={handleSave}
-                disabled={saving || (!editing && (!form.username || !form.password))}
-              >
-                <Icons.Save /> {saving ? "Saving..." : "Simpan"}
-              </button>
-              <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
-            </div>
+      {selected && (
+        <Modal title="Detail Chat Log" onClose={() => setSelected(null)} wide>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)" }}>Sender: <code style={{ color: "#22d3ee" }}>{selected.sender_id}</code> • {fmtDate(selected.created_at)}</div>
+            <div><p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Pesan User</p><div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.2)", fontSize: 13, lineHeight: 1.6 }}>{selected.user_message}</div></div>
+            <div><p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Respons Bot</p><div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.15)", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{selected.bot_response}</div></div>
           </div>
         </Modal>
       )}
@@ -770,145 +646,333 @@ function AccessPage() {
   );
 }
 
-// ─── Main App ─────────────────────────────────────────────────────────────────
-export default function AdminPage() {
-  const router = useRouter();
-  const [page, setPage] = useState<Page>("dashboard");
-  const [dark, setDark] = useState(true);
-  const [stats, setStats] = useState({ knowledge: 0, workshops: 0, pesanan: 0, chatlogs: 0 });
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("light", !dark);
-  }, [dark]);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/knowledge").then(r => r.json()),
-      fetch("/api/workshops").then(r => r.json()),
-      fetch("/api/pesanan").then(r => r.json()),
-      fetch("/api/chat-logs").then(r => r.json()),
-    ]).then(([kb, ws, ps, cl]) => {
-      setStats({ knowledge: kb.length, workshops: ws.length, pesanan: ps.length, chatlogs: cl.length });
-    }).catch(() => { });
-  }, []);
-
-  const handleLogout = async () => {
-    await fetch("/api/auth", { method: "DELETE" });
-    router.push("/login");
+function AccessPage() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ username: "", password: "", role: "admin" });
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/admin-users"); if (r.ok) setUsers(await r.json()); setLoading(false); }, []);
+  useEffect(() => { load(); }, [load]);
+  const addUser = async () => {
+    setSaving(true);
+    await fetch("/api/admin-users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    setSaving(false); setAdding(false); load();
   };
+  const del = async (id: number) => { if (!confirm("Hapus user ini?")) return; await fetch(`/api/admin-users/${id}`, { method: "DELETE" }); load(); };
+  const ROLE_OPTS = [{ value: "admin", label: "👤 Admin" }, { value: "superadmin", label: "⭐ Superadmin" }];
+  return (
+    <div className="animate-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Access Control</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola akun admin panel</p></div>
+        <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}><Icons.Plus /> Tambah User</button>
+      </div>
+      <div className="card" style={{ overflow: "hidden" }}>
+        {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Dibuat</th><th style={{ width: 70 }}>Aksi</th></tr></thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{u.id}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{u.username}</td>
+                    <td><span className={`badge ${u.role === "superadmin" ? "badge-ai" : "badge-form"}`}>{u.role === "superadmin" ? "⭐ Superadmin" : "👤 Admin"}</span></td>
+                    <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{fmtDate(u.created_at)}</td>
+                    <td>{u.role !== "superadmin" && <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(u.id)}><Icons.Trash /></button>}</td>
+                  </tr>
+                ))}
+                {users.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Tidak ada data</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {adding && (
+        <Modal title="Tambah Admin User" onClose={() => setAdding(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Username" required><input className="input" placeholder="username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></Field>
+            <Field label="Password" required><input className="input" type="password" placeholder="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
+            <Field label="Role"><CustomSelect value={form.role} onChange={v => setForm(f => ({ ...f, role: v }))} options={ROLE_OPTS} /></Field>
+            <div style={{ display: "flex", gap: 8 }}><button className="btn btn-primary" style={{ flex: 1 }} onClick={addUser} disabled={saving}><Icons.Save /> {saving ? "..." : "Tambah"}</button><button className="btn btn-secondary" onClick={() => setAdding(false)}>Batal</button></div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
 
-  const NAV_ITEMS: { id: Page; label: string; icon: React.ReactNode; section?: string }[] = [
-    { id: "dashboard", label: "Dashboard", icon: <Icons.Dashboard />, section: "MENU" },
-    { id: "knowledge", label: "Knowledge Base", icon: <Icons.Brain />, section: "" },
-    { id: "workshops", label: "Workshops", icon: <Icons.Workshop />, section: "" },
-    { id: "pesanan", label: "Pesanan", icon: <Icons.Orders />, section: "" },
-    { id: "chatlogs", label: "Chat Logs", icon: <Icons.Chat />, section: "ADMIN" },
-    { id: "access", label: "Access Control", icon: <Icons.Lock />, section: "" },
-  ];
+// ─── Login Page ────────────────────────────────────────────────────────────────
+function LoginPage({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
-  const PAGE_TITLES: Record<Page, string> = {
-    dashboard: "Dashboard", knowledge: "Knowledge Base", workshops: "Workshops",
-    pesanan: "Pesanan", chatlogs: "Chat Logs", access: "Access Control",
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError("");
+    const r = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+    if (r.ok) onLogin();
+    else { const d = await r.json(); setError(d.error ?? "Login gagal"); }
+    setLoading(false);
   };
 
   return (
-    <div className="admin-layout">
-      {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-      <aside className="sidebar">
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-base)", padding: 16 }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg,rgba(56,189,248,0.15),rgba(6,182,212,0.1))", border: "1px solid rgba(56,189,248,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", boxShadow: "0 8px 30px rgba(14,165,233,0.25)" }}>
+            <img src="/Logo_DynoBoo.png" alt="DynoBoo" style={{ height: 54, objectFit: "contain" }} />
+          </div>
+          <h1 className="gradient-text" style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>DynoBoo</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>Admin Panel — Semi POS Digital</p>
+        </div>
+        <div className="card" style={{ padding: 28 }}>
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Username"><input className="input" autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} placeholder="superadmin" /></Field>
+            <Field label="Password">
+              <div style={{ position: "relative" }}>
+                <input className="input" type={showPass ? "text" : "password"} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={{ width: "100%", paddingRight: 40 }} />
+                <button type="button" onClick={() => setShowPass(!showPass)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4 }}>
+                  {showPass ? <Icons.EyeOff /> : <Icons.Eye />}
+                </button>
+              </div>
+            </Field>
+            {error && <p style={{ color: "#f87171", fontSize: 12, background: "rgba(239,68,68,0.08)", padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.2)" }}>{error}</p>}
+            <button className="btn btn-primary" type="submit" style={{ justifyContent: "center", padding: "11px" }} disabled={loading}>{loading ? "Masuk..." : "Masuk"}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ──────────────────────────────────────────────────────────────────
+export default function AdminPage() {
+  const router = useRouter();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [darkMode, setDarkMode] = useState(true);
+  const [currentInvoiceId, setCurrentInvoiceId] = useState<number | null>(null);
+  const [prefillPesanan, setPrefillPesanan] = useState<Pesanan | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      const r = await fetch("/api/auth");
+      setIsLoggedIn(r.ok);
+      setCheckingAuth(false);
+    };
+    check();
+  }, []);
+
+  useEffect(() => {
+    if (darkMode) document.documentElement.classList.remove("light");
+    else document.documentElement.classList.add("light");
+  }, [darkMode]);
+
+  const logout = async () => {
+    await fetch("/api/auth", { method: "DELETE" });
+    setIsLoggedIn(false);
+  };
+
+  const handleNavigate = (page: Page, data?: unknown) => {
+    if (page === "manual") {
+      window.open("/manual", "_blank");
+      return;
+    }
+    if (page === "invoice-form" && data) setPrefillPesanan(data as Pesanan);
+    else if (page === "invoice-form") setPrefillPesanan(null);
+    setCurrentPage(page);
+    setMobileMenuOpen(false);
+  };
+
+  const goToInvoiceDetail = (id: number) => { setCurrentInvoiceId(id); setCurrentPage("invoice-detail"); setMobileMenuOpen(false); };
+  const goToInvoiceForm = () => { setPrefillPesanan(null); setCurrentPage("invoice-form"); setMobileMenuOpen(false); };
+  const createInvoiceFromPesanan = (p: Pesanan) => { setPrefillPesanan(p); setCurrentPage("invoice-form"); setMobileMenuOpen(false); };
+  const handleInvoiceCreated = (id: number) => { setCurrentPage("invoice-detail"); setCurrentInvoiceId(id); setMobileMenuOpen(false); };
+
+  if (checkingAuth) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-base)" }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid rgba(56,189,248,0.3)", borderTopColor: "#38bdf8", animation: "spin 1s linear infinite", margin: "0 auto 12px" }} />
+        <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Memuat...</p>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if (!isLoggedIn) return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+
+  const PAGE_TITLES: Record<Page, string> = {
+    dashboard: "Dashboard", katalog: "Katalog Produk", stok: "Stok & Kuota",
+    "invoice-list": "Daftar Invoice", "invoice-form": "Buat Invoice",
+    "invoice-detail": "Detail Invoice", "invoice-types": "Tipe Invoice",
+    knowledge: "Knowledge Base", workshops: "Workshops",
+    pesanan: "Pesanan", chatlogs: "Chat Logs",
+    company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
+    manual: "Buku Panduan",
+  };
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case "dashboard": return <DashboardPage onNavigate={handleNavigate} />;
+      case "katalog": return <KatalogPage />;
+      case "stok": return <StokPage />;
+      case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} />;
+      case "invoice-form": return <InvoiceFormPage onSuccess={handleInvoiceCreated} onCancel={() => setCurrentPage("invoice-list")} prefillPesanan={prefillPesanan} />;
+      case "invoice-detail": return currentInvoiceId ? <InvoiceDetailPage invoiceId={currentInvoiceId} onBack={() => setCurrentPage("invoice-list")} /> : null;
+      case "invoice-types": return <InvoiceTypesPage />;
+      case "knowledge": return <KnowledgePage />;
+      case "workshops": return <WorkshopsPage />;
+      case "pesanan": return <PesananPage onCreateInvoiceFromPesanan={createInvoiceFromPesanan} />;
+      case "chatlogs": return <ChatLogsPage />;
+      case "company": return <CompanyPage />;
+      case "access": return <AccessPage />;
+      case "ai-assistant": return <AiAssistantPage />;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className={`admin-layout ${darkMode ? "" : "light"}`}>
+      {/* Mobile Backdrop Overlay */}
+      {mobileMenuOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 999 }} onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${mobileMenuOpen ? "mobile-open" : ""}`}>
         {/* Logo */}
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 10, background: "white", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-              <img src="/Logo_DynoBoo.png" alt="DynoBoo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <img src="/Logo_DynoBoo.png" alt="DynoBoo" style={{ height: 26, objectFit: "contain" }} />
             </div>
             <div>
-              <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.2 }}>DynoBoo</p>
-              <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Admin Panel</p>
+              <p className="gradient-text" style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1 }}>DynoBoo</p>
+              <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3 }}>Admin Panel</p>
             </div>
           </div>
+          <button className="btn btn-secondary btn-sm btn-icon" style={{ display: "none" }} onClick={() => setMobileMenuOpen(false)}>
+            <Icons.X />
+          </button>
         </div>
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item, idx) => (
-            <div key={item.id}>
-              {item.section !== undefined && item.section !== "" && (
-                <p className="nav-section-label">{item.section}</p>
-              )}
-              {item.section === "" && idx > 0 && NAV_ITEMS[idx - 1].section === "" && null}
-              <div
-                id={`nav-${item.id}`}
-                className={`nav-item ${page === item.id ? "active" : ""}`}
-                onClick={() => setPage(item.id)}
-              >
-                {item.icon}
-                {item.label}
-                {item.id === "pesanan" && stats.pesanan > 0 && (
-                  <span style={{ marginLeft: "auto", background: "rgba(6,182,212,0.2)", color: "#22d3ee", borderRadius: 999, fontSize: 10, fontWeight: 700, padding: "1px 7px" }}>
-                    {stats.pesanan}
-                  </span>
-                )}
-              </div>
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={group.key}>
+              {gi > 0 && <div className="nav-section-divider" />}
+              <p className="nav-section-label">{group.key}</p>
+              {group.items?.map(item => (
+                <div key={item.id} className={`nav-item ${currentPage === item.id ? "active" : ""}`} onClick={() => handleNavigate(item.id as Page)}>
+                  {item.icon}<span>{item.label}</span>
+                </div>
+              ))}
+              {group.sub?.map(sub => (
+                <div key={sub.label}>
+                  <p style={{ fontSize: 9, fontWeight: 600, color: "var(--text-subtle)", paddingLeft: 12, marginTop: 6, marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>— {sub.label}</p>
+                  {sub.items.map(item => (
+                    <div key={item.id} className={`nav-item ${currentPage === item.id || (currentPage === "invoice-detail" && item.id === "invoice-list") ? "active" : ""}`} onClick={() => handleNavigate(item.id as Page)}>
+                      {item.icon}<span>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ))}
         </nav>
 
         {/* Footer */}
         <div className="sidebar-footer">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, marginBottom: 6 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #ec4899)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 12 }}>👑</span>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>SuperAdmin</p>
-              <p style={{ fontSize: 10, color: "var(--text-muted)" }}>Full Access</p>
-            </div>
-          </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            style={{ width: "100%", justifyContent: "center" }}
-            onClick={handleLogout}
-          >
-            <Icons.Logout /> Keluar
+          <button className="nav-item" style={{ width: "100%", color: "#f87171" }} onClick={logout}>
+            <Icons.Logout /><span>Keluar</span>
           </button>
         </div>
       </aside>
 
-      {/* ── Main ─────────────────────────────────────────────────────────── */}
+      {/* Main content */}
       <div className="main-content">
         {/* Topbar */}
-        <header className="topbar">
-          <h1 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-            {PAGE_TITLES[page]}
-          </h1>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {/* Connection status */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 8px #34d399" }} className="pulse-ring" />
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Supabase</span>
-            </div>
-            {/* Dark/Light toggle */}
-            <button
-              id="theme-toggle"
-              className="theme-btn"
-              onClick={() => setDark(v => !v)}
-              title={dark ? "Light Mode" : "Dark Mode"}
-            >
-              {dark ? <Icons.Sun /> : <Icons.Moon />}
+        <div className="topbar">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="theme-btn mobile-menu-btn" style={{ display: "none" }} onClick={() => setMobileMenuOpen(m => !m)}>
+              <span style={{ fontSize: 16 }}>☰</span>
             </button>
+            <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{PAGE_TITLES[currentPage]}</h2>
           </div>
-        </header>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button className="theme-btn" onClick={() => setDarkMode(d => !d)} title="Toggle theme">
+              {darkMode ? <Icons.Sun /> : <Icons.Moon />}
+            </button>
+            <div style={{ padding: "4px 12px", borderRadius: 6, background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.25)", fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>superadmin</div>
+          </div>
+        </div>
 
-        {/* Content */}
+        {/* Page content */}
         <main className="page-content">
-          {page === "dashboard" && <DashboardPage stats={stats} />}
-          {page === "knowledge" && <KnowledgePage />}
-          {page === "workshops" && <WorkshopsPage />}
-          {page === "pesanan" && <PesananPage />}
-          {page === "chatlogs" && <ChatLogsPage />}
-          {page === "access" && <AccessPage />}
+          {renderPage()}
         </main>
       </div>
+
+      {/* ── Floating AI Chat Bubble ───────────────────────────────────────── */}
+      {aiOpen && (
+        <div className="ai-chat-panel" style={{
+          position: "fixed", bottom: 88, right: 24, zIndex: 9998,
+          width: 380, height: 560,
+          background: "var(--bg-card)", border: "1px solid var(--border-2)",
+          borderRadius: 18, boxShadow: "0 16px 60px rgba(0,0,0,0.55)",
+          display: "flex", flexDirection: "column", overflow: "hidden",
+          animation: "chatBubbleIn 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+        }}>
+          {/* Panel header */}
+          <div style={{
+            padding: "12px 16px", borderBottom: "1px solid var(--border)",
+            background: "linear-gradient(135deg,rgba(2,132,199,0.2),rgba(6,182,212,0.12))",
+            display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+          }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg,#0284c7,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🦖</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", lineHeight: 1 }}>AI Assistant DynoBoo</p>
+              <p style={{ fontSize: 10, color: "#38bdf8", marginTop: 2 }}>Powered by Gemini ✨</p>
+            </div>
+            <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setAiOpen(false)}><Icons.X /></button>
+          </div>
+          {/* Chat content */}
+          <div style={{ flex: 1, overflow: "hidden", padding: "0 4px 4px" }}>
+            <AiAssistantPage />
+          </div>
+        </div>
+      )}
+
+      {/* Bubble button */}
+      <button
+        onClick={() => setAiOpen(o => !o)}
+        style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          width: 56, height: 56, borderRadius: "50%", border: "none",
+          background: aiOpen ? "linear-gradient(135deg,#0284c7,#06b6d4)" : "linear-gradient(135deg,#0ea5e9,#06b6d4)",
+          boxShadow: "0 4px 24px rgba(14,165,233,0.55)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 26, transition: "all 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+          transform: aiOpen ? "rotate(180deg) scale(1.05)" : "rotate(0deg) scale(1)",
+        }}
+        title={aiOpen ? "Tutup AI Assistant" : "Buka AI Assistant"}
+      >
+        {aiOpen ? "✕" : "🦖"}
+      </button>
+
+      <style>{`
+        @keyframes chatBubbleIn {
+          from { opacity: 0; transform: scale(0.85) translateY(20px); transform-origin: bottom right; }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -150,9 +150,9 @@ export default function LoginPage() {
           filter: blur(80px);
           animation: blobMove 8s ease-in-out infinite alternate;
         }
-        .blob-1 { width: 400px; height: 400px; background: rgba(124,58,237,0.15); top: -100px; left: -100px; animation-delay: 0s; }
-        .blob-2 { width: 350px; height: 350px; background: rgba(236,72,153,0.12); bottom: -80px; right: -80px; animation-delay: 2s; }
-        .blob-3 { width: 300px; height: 300px; background: rgba(6,182,212,0.1); bottom: 100px; left: 100px; animation-delay: 4s; }
+        .blob-1 { width: 400px; height: 400px; background: rgba(2,132,199,0.15); top: -100px; left: -100px; animation-delay: 0s; }
+        .blob-2 { width: 350px; height: 350px; background: rgba(6,182,212,0.12); bottom: -80px; right: -80px; animation-delay: 2s; }
+        .blob-3 { width: 300px; height: 300px; background: rgba(14,165,233,0.1); bottom: 100px; left: 100px; animation-delay: 4s; }
         @keyframes blobMove {
           from { transform: scale(1) translate(0, 0); }
           to { transform: scale(1.1) translate(20px, -20px); }
@@ -174,8 +174,8 @@ export default function LoginPage() {
           transition: all 0.2s;
         }
         .login-input:focus {
-          border-color: rgba(124,58,237,0.7);
-          box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+          border-color: rgba(6,182,212,0.7);
+          box-shadow: 0 0 0 3px rgba(6,182,212,0.15);
           background: rgba(255,255,255,0.07);
         }
         .login-input::placeholder { color: #475569; }
@@ -185,7 +185,7 @@ export default function LoginPage() {
           font-size: 14px;
           font-weight: 600;
           color: white;
-          background: linear-gradient(135deg, #7c3aed, #ec4899);
+          background: linear-gradient(135deg, #0ea5e9, #06b6d4);
           border: none;
           cursor: pointer;
           transition: all 0.2s;
@@ -194,7 +194,7 @@ export default function LoginPage() {
         .login-btn:hover:not(:disabled) {
           opacity: 0.92;
           transform: translateY(-1px);
-          box-shadow: 0 8px 25px rgba(124,58,237,0.4);
+          box-shadow: 0 8px 25px rgba(14,165,233,0.4);
         }
         .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
       `}</style>
