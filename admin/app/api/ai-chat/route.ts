@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         parts: [{ text: SYSTEM_PROMPT }]
       },
       contents: contents.length > 0 ? contents : [{ role: "user", parts: [{ text: "Halo" }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     };
 
     let lastError = "";
@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       const result = await res.json();
 
       if (res.ok) {
-        const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parts = result?.candidates?.[0]?.content?.parts || [];
+        const text = parts.map((p: any) => p.text).join("");
         if (text) {
           return Response.json({ reply: text, model: modelName });
         }

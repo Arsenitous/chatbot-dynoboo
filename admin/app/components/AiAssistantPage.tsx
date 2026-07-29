@@ -6,7 +6,7 @@ type Message = { role: "user" | "assistant"; content: string };
 
 export default function AiAssistantPage() {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Halo! Saya asisten pribadi DynoBoo 🦕✨\n\nSaya siap membantu kamu dengan:\n• Pengelolaan produk & stok\n• Pembuatan invoice & laporan\n• Strategi marketing & caption IG\n• Pertanyaan seputar bisnis\n\nAda yang bisa saya bantu hari ini?" },
+    { role: "assistant", content: "Halo! Saya asisten pribadi DynoBoo 🦖✨\n\nSaya siap membantu kamu dengan:\n• Pengelolaan produk & stok\n• Pembuatan invoice & laporan\n• Strategi marketing & caption IG\n• Pertanyaan seputar bisnis\n\nAda yang bisa saya bantu hari ini?" },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,7 +54,7 @@ export default function AiAssistantPage() {
     <div className="animate-in" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
       <div style={{ marginBottom: 20, flexShrink: 0 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", borderRadius: 8, padding: "4px 8px", fontSize: 16 }}>🦕</span>
+          <span style={{ background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", borderRadius: 8, padding: "4px 8px", fontSize: 16 }}>🦖</span>
           AI Assistant DynoBoo
           <span className="badge badge-ai" style={{ fontSize: 10 }}>Powered by Gemini</span>
         </h2>
@@ -66,7 +66,7 @@ export default function AiAssistantPage() {
         {messages.map((msg, idx) => (
           <div key={idx} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
             {msg.role === "assistant" && (
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 8, fontSize: 14, alignSelf: "flex-end" }}>🦕</div>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: 8, fontSize: 14, alignSelf: "flex-end" }}>🦖</div>
             )}
             <div style={{
               maxWidth: "72%",
