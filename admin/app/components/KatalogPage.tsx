@@ -13,7 +13,7 @@ export default function KatalogPage() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
 
-  const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", qty_available: "0", is_active: true };
+  const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
@@ -35,7 +35,6 @@ export default function KatalogPage() {
       harga_normal: String(item.harga_normal),
       harga_promo: String(item.harga_promo ?? ""),
       satuan: item.satuan,
-      qty_available: String(item.stock?.qty_available ?? 0),
       is_active: item.is_active,
     });
     setEditing(item); setAdding(false);
@@ -51,7 +50,6 @@ export default function KatalogPage() {
       harga_promo: form.harga_promo ? Number(form.harga_promo) : null,
       satuan: form.satuan,
       is_active: form.is_active,
-      qty_available: Number(form.qty_available),
     };
     if (editing) {
       await fetch(`/api/items/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -112,7 +110,6 @@ export default function KatalogPage() {
               <th>Tipe</th>
               <th>Harga Normal</th>
               <th>Harga Promo</th>
-              <th>Stok</th>
               <th>Status</th>
               <th style={{ width: 90 }}>Aksi</th>
             </tr></thead>
@@ -128,15 +125,6 @@ export default function KatalogPage() {
                   <td><span style={{ fontSize: 12 }}>{item.item_type ? `${item.item_type.icon} ${item.item_type.nama}` : "—"}</span></td>
                   <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{fmtRp(item.harga_normal)}</td>
                   <td style={{ color: "#34d399", fontWeight: 600 }}>{item.harga_promo ? fmtRp(item.harga_promo) : <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
-                  <td>
-                    <span style={{
-                      fontWeight: 700,
-                      color: (item.stock?.qty_available ?? 0) <= 3 ? "#f87171" : (item.stock?.qty_available ?? 0) <= 10 ? "#fbbf24" : "#34d399"
-                    }}>
-                      {item.stock?.qty_available ?? 0}
-                    </span>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 4 }}>/ terjual {item.stock?.qty_sold ?? 0}</span>
-                  </td>
                   <td><span className={`badge ${item.is_active ? "badge-active" : "badge-closed"}`}>{item.is_active ? "Aktif" : "Nonaktif"}</span></td>
                   <td>
                     <div style={{ display: "flex", gap: 6 }}>
@@ -146,7 +134,7 @@ export default function KatalogPage() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>📦 Belum ada item di katalog</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>📦 Belum ada item di katalog</td></tr>}
             </tbody>
           </table>
         )}
@@ -164,7 +152,7 @@ export default function KatalogPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Satuan"><CustomSelect value={form.satuan} onChange={v => setForm({ ...form, satuan: v })} options={satOptions} /></Field>
-              <Field label="Stok / Kuota Awal"><input className="input" type="number" placeholder="0" value={form.qty_available} onChange={e => setForm({ ...form, qty_available: e.target.value })} /></Field>
+              <Field label="Harga Promo"><input className="input" type="number" placeholder="90000" value={form.harga_promo} onChange={e => setForm({ ...form, harga_promo: e.target.value })} /></Field>
             </div>
             <Field label="Status">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
