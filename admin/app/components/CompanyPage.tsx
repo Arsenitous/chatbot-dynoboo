@@ -9,10 +9,16 @@ export default function CompanyPage() {
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [form, setForm] = useState({
-    nama_toko: "", tagline: "", alamat: "", kota: "", no_hp: "", email: "", instagram: "", rekening: [] as RekeningItem[],
+    nama_toko: "", tagline: "", alamat: "", kota: "", no_hp: "", email: "", instagram: "", logo_url: "",
+    rekening: [] as RekeningItem[],
   });
+
+  const showToast = (msg: string, type: "ok" | "err" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -21,7 +27,17 @@ export default function CompanyPage() {
       const data: CompanyProfile | null = await r.json();
       if (data) {
         setProfile(data);
-        setForm({ nama_toko: data.nama_toko, tagline: data.tagline ?? "", alamat: data.alamat ?? "", kota: data.kota ?? "", no_hp: data.no_hp ?? "", email: data.email ?? "", instagram: data.instagram ?? "", rekening: data.rekening ?? [] });
+        setForm({
+          nama_toko: data.nama_toko ?? "",
+          tagline: data.tagline ?? "",
+          alamat: data.alamat ?? "",
+          kota: data.kota ?? "",
+          no_hp: data.no_hp ?? "",
+          email: data.email ?? "",
+          instagram: data.instagram ?? "",
+          logo_url: data.logo_url ?? "",
+          rekening: (data.rekening as RekeningItem[]) ?? [],
+        });
       }
     }
     setLoading(false);
@@ -30,9 +46,23 @@ export default function CompanyPage() {
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
+    if (!form.nama_toko.trim()) {
+      showToast("Nama toko tidak boleh kosong!", "err");
+      return;
+    }
     setSaving(true);
-    const r = await fetch("/api/company", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); load(); }
+    const r = await fetch("/api/company", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (r.ok) {
+      showToast("✓ Profil toko berhasil disimpan!");
+      load();
+    } else {
+      const d = await r.json();
+      showToast(d.error ?? "Gagal menyimpan profil toko", "err");
+    }
     setSaving(false);
   };
 
@@ -46,13 +76,28 @@ export default function CompanyPage() {
 
   return (
     <div className="animate-in">
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+          background: toast.type === "ok" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+          border: `1px solid ${toast.type === "ok" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+          color: toast.type === "ok" ? "#34d399" : "#f87171",
+          animation: "fadeSlideUp 0.2s ease",
+          backdropFilter: "blur(8px)",
+        }}>
+          {toast.msg}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Profil Toko</h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Identitas toko yang tampil di header invoice cetak</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-          <Icons.Save /> {saving ? "Menyimpan..." : saved ? "✓ Tersimpan!" : "Simpan Perubahan"}
+          <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Perubahan"}
         </button>
       </div>
 
@@ -65,6 +110,7 @@ export default function CompanyPage() {
               <Field label="Tagline"><input className="input" value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="Handmade Crochet Dolls & Beaded Accessories" /></Field>
               <Field label="Kota"><input className="input" value={form.kota} onChange={e => setForm(f => ({ ...f, kota: e.target.value }))} placeholder="Jakarta, Indonesia" /></Field>
               <Field label="Alamat Lengkap"><textarea className="input" rows={2} value={form.alamat} onChange={e => setForm(f => ({ ...f, alamat: e.target.value }))} placeholder="Jl. ..." /></Field>
+              <Field label="URL Logo (opsional)"><input className="input" value={form.logo_url} onChange={e => setForm(f => ({ ...f, logo_url: e.target.value }))} placeholder="https://..." /></Field>
             </div>
           </div>
 
@@ -116,8 +162,13 @@ export default function CompanyPage() {
                   <p style={{ fontSize: 11, color: "#6ca0a8", marginTop: 8 }}>Type : <strong>Invoice Workshop</strong></p>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <img src="/Logo_DynoBoo.png" alt="Logo" style={{ maxHeight: 60, maxWidth: 120, objectFit: "contain" }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  <p style={{ fontSize: 9, color: "#94a3b8", marginTop: 2 }}>CROCHET DOLLS & BEADED ACCESSORIES</p>
+                  <img
+                    src={form.logo_url || "/Logo_DynoBoo.png"}
+                    alt="Logo"
+                    style={{ maxHeight: 60, maxWidth: 120, objectFit: "contain" }}
+                    onError={e => { (e.target as HTMLImageElement).src = "/Logo_DynoBoo.png"; }}
+                  />
+                  <p style={{ fontSize: 9, color: "#94a3b8", marginTop: 2 }}>{form.tagline || "CROCHET DOLLS & BEADED ACCESSORIES"}</p>
                 </div>
                 <div style={{ textAlign: "right", fontSize: 11, color: "#475569" }}>
                   <p>Invoice Date : <strong>{new Date().toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})}</strong></p>
@@ -128,6 +179,11 @@ export default function CompanyPage() {
               <p style={{ fontSize: 10, color: "#94a3b8", textAlign: "center" }}>{form.nama_toko} {form.instagram && `• ${form.instagram}`} {form.no_hp && `• ${form.no_hp}`}</p>
             </div>
           </div>
+
+          {/* Save button (bottom) */}
+          <button className="btn btn-primary" style={{ justifyContent: "center", padding: "12px" }} onClick={save} disabled={saving}>
+            <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Semua Perubahan"}
+          </button>
         </div>
       </div>
     </div>

@@ -207,6 +207,30 @@ body { background: var(--bg-base); color: var(--text-primary); font-family: var(
   font-family: Arial, sans-serif;
   box-shadow: 0 4px 32px rgba(0,0,0,0.15);
 }
+/* ─── Sidebar Accordion / Tree View ─────────────────────────────────── */
+.nav-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+  user-select: none;
+}
+.nav-group-header:hover { background: var(--bg-hover); }
+.nav-group-chevron {
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.nav-group-chevron.open { transform: rotate(180deg); }
+.nav-group-content {
+  overflow: hidden;
+  max-height: 500px;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+  opacity: 1;
+}
+.nav-group-content.collapsed { max-height: 0; opacity: 0; }
+
 .invoice-header {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -215,7 +239,7 @@ body { background: var(--bg-base); color: var(--text-primary); font-family: var(
   margin-bottom: 32px;
 }
 .invoice-bill-to { }
-.invoice-logo-center { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.invoice-logo-center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .invoice-meta { text-align: right; }
 .invoice-meta p { font-size: 13px; color: #475569; margin-bottom: 6px; }
 .invoice-meta p span { color: #94a3b8; }

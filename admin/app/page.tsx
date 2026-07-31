@@ -76,11 +76,92 @@ const NAV_GROUPS = [
     items: [
       { id: "company", label: "Profil Toko", icon: <Icons.Building /> },
       { id: "access", label: "Access Control", icon: <Icons.Lock /> },
-      { id: "ai-assistant", label: "AI Assistant", icon: <Icons.Bot /> },
+      { id: "ai-assistant", label: "AI Assistant", icon: <span style={{fontSize:14}}>🦖</span> },
       { id: "manual", label: "Buku Panduan", icon: <Icons.Book /> },
     ],
   },
 ];
+
+function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GROUPS[number]; currentPage: Page; onNavigate: (page: Page) => void }) {
+  // Each sub-group has its own open/closed state, default open
+  const [openSubs, setOpenSubs] = useState<Record<number, boolean>>(() => {
+    const init: Record<number, boolean> = {};
+    (group.sub ?? []).forEach((_, i) => { init[i] = true; });
+    return init;
+  });
+
+  const isActive = (id: string) => currentPage === id || (currentPage === "invoice-detail" && id === "invoice-list");
+
+  const toggleSub = (idx: number) => setOpenSubs(prev => ({ ...prev, [idx]: !prev[idx] }));
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {/* Section label */}
+      {group.key !== "MENU" && (
+        <p className="nav-section-label">{group.key}</p>
+      )}
+
+      {/* Flat items (MENU, PENGATURAN) */}
+      {group.items?.map((item) => (
+        <button
+          key={item.id}
+          className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+          style={{ width: "100%", border: "none", background: "none" }}
+          onClick={() => onNavigate(item.id as Page)}
+        >
+          {item.icon}<span>{item.label}</span>
+        </button>
+      ))}
+
+      {/* Grouped sub-sections (PRODUK, INVOICE, CHATBOT) */}
+      {group.sub?.map((sub, si) => {
+        const isOpen = openSubs[si] !== false;
+        const hasActiveChild = sub.items.some(i => isActive(i.id));
+
+        return (
+          <div key={si}>
+            {/* Sub-group header / toggle */}
+            <button
+              className="nav-item"
+              style={{
+                width: "100%", border: "none", background: "none",
+                justifyContent: "space-between",
+                color: hasActiveChild ? "#38bdf8" : "var(--text-subtle)",
+                fontSize: 11, fontWeight: 700, letterSpacing: "0.07em",
+                textTransform: "uppercase", padding: "6px 12px",
+              }}
+              onClick={() => toggleSub(si)}
+            >
+              <span>— {sub.label}</span>
+              <svg
+                width="10" height="10" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                style={{ transition: "transform 0.2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", flexShrink: 0 }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {/* Sub-group items */}
+            <div className={`nav-group-content ${isOpen ? "" : "collapsed"}`}>
+              {sub.items.map((item) => (
+                <button
+                  key={item.id}
+                  className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+                  style={{ width: "100%", border: "none", background: "none", paddingLeft: 20 }}
+                  onClick={() => onNavigate(item.id as Page)}
+                >
+                  {item.icon}<span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -865,26 +946,13 @@ export default function AdminPage() {
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={group.key}>
-              {gi > 0 && <div className="nav-section-divider" />}
-              <p className="nav-section-label">{group.key}</p>
-              {group.items?.map(item => (
-                <div key={item.id} className={`nav-item ${currentPage === item.id ? "active" : ""}`} onClick={() => handleNavigate(item.id as Page)}>
-                  {item.icon}<span>{item.label}</span>
-                </div>
-              ))}
-              {group.sub?.map(sub => (
-                <div key={sub.label}>
-                  <p style={{ fontSize: 9, fontWeight: 600, color: "var(--text-subtle)", paddingLeft: 12, marginTop: 6, marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>— {sub.label}</p>
-                  {sub.items.map(item => (
-                    <div key={item.id} className={`nav-item ${currentPage === item.id || (currentPage === "invoice-detail" && item.id === "invoice-list") ? "active" : ""}`} onClick={() => handleNavigate(item.id as Page)}>
-                      {item.icon}<span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup
+              key={group.key}
+              group={group}
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+            />
           ))}
         </nav>
 

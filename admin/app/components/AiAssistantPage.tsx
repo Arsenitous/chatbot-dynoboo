@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Icons } from "./ui";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -87,10 +87,12 @@ export default function AiAssistantPage() {
         ))}
         {loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🤖</div>
+            {/* T-Rex icon saat loading */}
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#0ea5e9,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, animation: "trexBounce 0.8s ease-in-out infinite" }}>🦖</div>
             <div style={{ padding: "10px 16px", borderRadius: "4px 16px 16px 16px", background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-              <div style={{ display: "flex", gap: 4 }}>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                 {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#38bdf8", animation: `bounce 1.2s ${i*0.2}s ease-in-out infinite` }} />)}
+                <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>🦖 sedang berpikir...</span>
               </div>
             </div>
           </div>
@@ -127,7 +129,10 @@ export default function AiAssistantPage() {
       </div>
       <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6, textAlign: "center", flexShrink: 0 }}>AI dapat membuat kesalahan. Selalu verifikasi informasi penting.</p>
 
-      <style>{`@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }`}</style>
+      <style>{`
+        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+        @keyframes trexBounce { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-4px) rotate(5deg)} }
+      `}</style>
     </div>
   );
 }

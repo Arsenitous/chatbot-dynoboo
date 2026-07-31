@@ -1,5 +1,6 @@
-import os
 import json
+import os
+import threading
 import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -16,16 +17,18 @@ app = Flask(__name__)
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 PAGE_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+PAGE_ID = os.getenv("PAGE_ID")
 META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
+
+# Hilangkan trailing slash dari SUPABASE_URL jika ada
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # ─── Gemini Client ───────────────────────────────────────────────────────────
 client_ai = genai.Client(api_key=GEMINI_API_KEY)
 
-# ─── In-memory session: menyimpan state form registrasi per user ─────────────
-# Format: { sender_id: { "step": "nama"|"alamat"|"no_hp"|"produk", "data": {...} } }
+# ─── In-memory session ───────────────────────────────────────────────────────
 user_sessions: dict = {}
 
 
@@ -55,7 +58,7 @@ def sb_post(table: str, payload: dict) -> dict:
     )
     r.raise_for_status()
     result = r.json()
-    return result[0] if isinstance(result, list) else result
+    return result[0] if isinstance(result, list) and len(result) > 0 else result
 
 
 # ─── 1. Build Knowledge Base dari Supabase ───────────────────────────────────
@@ -67,7 +70,10 @@ def get_knowledge_base() -> str:
         # Ambil workshop yang ACTIVE / UPCOMING
         ws_rows = sb_get("workshops", "status=in.(ACTIVE,UPCOMING)&order=id.asc")
 
-        knowledge = "Berikut adalah data bisnis DynoBoo (Gunakan ini sebagai acuan menjawab):\n\n"
+        knowledge = (
+            "Berikut adalah data bisnis DynoBoo (Gunakan ini sebagai acuan"
+            " menjawab):\n\n"
+        )
 
         # Tambahkan data workshop ke knowledge
         if ws_rows:
@@ -91,12 +97,12 @@ def get_knowledge_base() -> str:
 
             pilihan = row.get("pilihan_jawaban")
             if pilihan:
-                # pilihan bisa berupa list atau string JSON
                 if isinstance(pilihan, str):
                     pilihan = json.loads(pilihan)
                 for opt in pilihan:
                     knowledge += (
-                        f"  Jika pilihan '{opt.get('opsi')}': {opt.get('jawaban')}\n"
+                        f"  Jika pilihan '{opt.get('opsi')}':"
+                        f" {opt.get('jawaban')}\n"
                     )
 
             if row.get("keterangan"):
@@ -112,7 +118,10 @@ def get_knowledge_base() -> str:
 
 # ─── 2. Log chat ke Supabase ─────────────────────────────────────────────────
 def log_chat(
-    sender_id: str, user_message: str, bot_response: str, intent: str = "AI_GEMINI"
+    sender_id: str,
+    user_message: str,
+    bot_response: str,
+    intent: str = "AI_GEMINI",
 ):
     try:
         sb_post(
@@ -150,12 +159,12 @@ def generate_ai_reply(user_message: str) -> str:
         "Kamu adalah 'DynoMin', admin chatbot pintar, ramah, dan solutif untuk"
         " bisnis kerajinan tangan 'DynoBoo' yang berlokasi di Kota Pontianak."
         " Tugasmu adalah menjawab pertanyaan customer dengan sopan menggunakan"
-        " bahasa Indonesia yang santai tapi profesional (gunakan panggilan 'Kak')."
-        " JAWABLAH HANYA berdasarkan informasi dari data bisnis yang disediakan."
-        " Jika ditanya hal yang tidak ada di data, minta customer menunggu balasan"
-        " langsung dari admin fisik dengan sopan.\n\n"
-        "PENTING: Jika customer ingin memesan, arahkan mereka untuk ketik 'pesan'"
-        " agar bisa mengisi form pemesanan otomatis.\n\n"
+        " bahasa Indonesia yang santai tapi profesional (gunakan panggilan"
+        " 'Kak'). JAWABLAH HANYA berdasarkan informasi dari data bisnis yang"
+        " disediakan. Jika ditanya hal yang tidak ada di data, minta customer"
+        " menunggu balasan langsung dari admin fisik dengan sopan.\n\nPENTING:"
+        " Jika customer ingin memesan, arahkan mereka untuk ketik 'pesan' agar"
+        " bisa mengisi form pemesanan otomatis.\n\n"
         f"{knowledge_base}"
     )
 
@@ -175,17 +184,30 @@ def send_instagram_message(recipient_id: str, text_reply: str):
         print("⚠️ PAGE_ACCESS_TOKEN belum di-set di .env", flush=True)
         return
 
-    url = "https://graph.facebook.com/v21.0/me/messages"
-    res = requests.post(
-        url,
-        json={"recipient": {"id": recipient_id}, "message": {"text": text_reply}},
-        headers={"Content-Type": "application/json"},
-        params={"access_token": PAGE_ACCESS_TOKEN},
-        timeout=10,
-    )
-    print(f"📤 IG Status {res.status_code}: {res.text[:200]}", flush=True)
-    if res.status_code >= 400:
-        print(f"❌ Gagal kirim ke {recipient_id}", flush=True)
+    target_id = os.getenv("PAGE_ID") or "me"
+    url = f"https://graph.facebook.com/v21.0/{target_id}/messages"
+
+    try:
+        res = requests.post(
+            url,
+            json={
+                "recipient": {"id": recipient_id},
+                "message": {"text": text_reply},
+            },
+            headers={"Content-Type": "application/json"},
+            params={"access_token": PAGE_ACCESS_TOKEN},
+            timeout=10,
+        )
+        print(f"📤 IG Response Status: {res.status_code}", flush=True)
+        print(f"📤 IG Response Body: {res.text}", flush=True)
+
+        if res.status_code >= 400:
+            print(
+                f"❌ Meta menolak pengiriman pesan ke {recipient_id}",
+                flush=True,
+            )
+    except Exception as e:
+        print(f"❌ Error koneksi saat kirim ke Instagram API: {e}", flush=True)
 
 
 # ─── 6. Form Registrasi Step-by-step ─────────────────────────────────────────
@@ -193,7 +215,7 @@ FORM_STEPS = {
     "nama": "📝 Silakan ketik *Nama Lengkap* kamu ya Kak:",
     "alamat": "🏠 Sekarang ketik *Alamat Pengiriman/Domisili* kamu Kak:",
     "no_hp": "📱 Ketik *Nomor HP/WhatsApp* yang bisa dihubungi ya Kak:",
-    "produk": "🛍️ Terakhir, ketik *Produk atau Workshop* yang ingin kamu pesan:",
+    "produk": ("🛍️ Terakhir, ketik *Produk atau Workshop* yang ingin kamu pesan:"),
 }
 STEP_ORDER = ["nama", "alamat", "no_hp", "produk"]
 
@@ -204,7 +226,6 @@ def handle_form(sender_id: str, user_text: str) -> str:
     data = session.get("data", {})
 
     if not step:
-        # Mulai form
         user_sessions[sender_id] = {"step": "nama", "data": {}}
         return (
             "📋 *Form Pemesanan DynoBoo*\n\n"
@@ -215,7 +236,6 @@ def handle_form(sender_id: str, user_text: str) -> str:
     # Simpan jawaban step sebelumnya
     data[step] = user_text.strip()
 
-    # Cari step berikutnya
     idx = STEP_ORDER.index(step)
     if idx + 1 < len(STEP_ORDER):
         next_step = STEP_ORDER[idx + 1]
@@ -225,21 +245,24 @@ def handle_form(sender_id: str, user_text: str) -> str:
         # Form selesai → simpan ke Supabase
         try:
             save_pesanan(sender_id, data)
-            del user_sessions[sender_id]
+            if sender_id in user_sessions:
+                del user_sessions[sender_id]
             return (
                 "✅ *Pesananmu sudah tercatat!*\n\n"
                 f"📌 Nama    : {data['nama']}\n"
                 f"🏠 Alamat  : {data['alamat']}\n"
                 f"📱 No. HP  : {data['no_hp']}\n"
                 f"🛍️ Produk  : {data['produk']}\n\n"
-                "Admin DynoBoo akan segera menghubungimu untuk konfirmasi pesanan ya Kak! 🦖"
+                "Admin DynoBoo akan segera menghubungimu untuk konfirmasi"
+                " pesanan ya Kak! 🦖"
             )
         except Exception as e:
             print(f"❌ Gagal simpan pesanan: {e}", flush=True)
-            del user_sessions[sender_id]
+            if sender_id in user_sessions:
+                del user_sessions[sender_id]
             return (
-                "Maaf Kak, ada kendala saat menyimpan pesananmu. "
-                "Silakan coba lagi atau hubungi admin via WhatsApp di 0851-9591-6540 ya!"
+                "Maaf Kak, ada kendala saat menyimpan pesananmu. Silakan coba"
+                " lagi atau hubungi admin via WhatsApp di 0851-9591-6540 ya!"
             )
 
 
@@ -270,7 +293,8 @@ def process_message(sender_id: str, user_text: str):
     except Exception as e:
         print(f"❌ Gemini error: {e}", flush=True)
         reply = (
-            "Maaf Kak, DynoMin sedang gangguan sesaat. Coba lagi beberapa saat ya! 🙏"
+            "Maaf Kak, DynoMin sedang gangguan sesaat. Coba lagi beberapa"
+            " saat ya! 🙏"
         )
         intent = "AI_GEMINI"
 
@@ -291,7 +315,7 @@ def verify_webhook():
     return "Forbidden", 403
 
 
-# ─── 9. Webhook POST (Terima Pesan Masuk) ────────────────────────────────────
+# ─── 9. Webhook POST (Terima Pesan Masuk - Async Multi-threading) ────────────
 @app.route("/webhook", methods=["POST"])
 def handle_messages():
     data = request.get_json()
@@ -306,7 +330,14 @@ def handle_messages():
                     user_text = msg.get("text", "").strip()
                     if user_text:
                         print(f"📩 [{sender_id}]: {user_text}", flush=True)
-                        process_message(sender_id, user_text)
+
+                        # 🚀 Jalankan di Background Thread agar Meta langsung dapat HTTP 200
+                        threading.Thread(
+                            target=process_message,
+                            args=(sender_id, user_text),
+                        ).start()
+
+        # Langsung respon Meta < 1 detik untuk mencegah Meta melakukan Retry
         return "EVENT_RECEIVED", 200
 
     return "Not Found", 404
@@ -316,6 +347,43 @@ def handle_messages():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "DynoBoo Chatbot v2"}), 200
+
+
+# ─── 11. Supabase Keep-Alive Ping ─────────────────────────────────────────────
+def ping_supabase():
+    try:
+        res = sb_post(
+            "chat_logs",
+            {
+                "sender_id": "SYSTEM_KEEPALIVE",
+                "user_message": "PING_KEEP_ALIVE",
+                "bot_response": "PONG_SUPABASE_ACTIVE",
+                "intent": "KEEPALIVE",
+            },
+        )
+        print("[SUCCESS] Supabase Keep-Alive Ping Berhasil!", flush=True)
+        return True, res
+    except Exception as e:
+        print(f"[ERROR] Supabase Keep-Alive Ping Gagal: {e}", flush=True)
+        return False, str(e)
+
+
+@app.route("/ping-supabase", methods=["GET", "POST"])
+def ping_supabase_endpoint():
+    success, details = ping_supabase()
+    if success:
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "Supabase pinged successfully",
+                    "data": details,
+                }
+            ),
+            200,
+        )
+    else:
+        return jsonify({"status": "error", "message": details}), 500
 
 
 if __name__ == "__main__":

@@ -12,33 +12,79 @@ type StockRow = {
   item: { id: number; nama: string; satuan: string; harga_normal: number; harga_promo: number | null; is_active: boolean; item_type: { nama: string; icon: string } | null };
 };
 
+type EditMode = "set" | "add" | "subtract";
+
 export default function StokPage() {
   const [stocks, setStocks] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<StockRow | null>(null);
   const [qty, setQty] = useState("");
+  const [editMode, setEditMode] = useState<EditMode>("set");
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
+
+  const showToast = (msg: string, type: "ok" | "err" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = await fetch("/api/stocks");
-    setStocks(await r.json());
+    if (r.ok) setStocks(await r.json());
+    else showToast("Gagal memuat data stok", "err");
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const openEdit = (s: StockRow) => { setEditing(s); setQty(String(s.qty_available)); };
+  const openEdit = (s: StockRow) => {
+    setEditing(s);
+    setQty("0");
+    setEditMode("add");
+  };
 
   const save = async () => {
     if (!editing) return;
     setSaving(true);
-    await fetch(`/api/stocks/${editing.item_id}`, {
+    const body = editMode === "set"
+      ? { qty_available: Number(qty) }
+      : { mode: "adjust", adjust_by: editMode === "add" ? Number(qty) : -Number(qty) };
+
+    const r = await fetch(`/api/stocks/${editing.item_id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ qty_available: Number(qty) }),
+      body: JSON.stringify(body),
     });
-    setSaving(false); setEditing(null); load();
+    if (r.ok) {
+      showToast(`Stok ${editing.item?.nama} berhasil diupdate!`);
+      setEditing(null);
+      load();
+    } else {
+      const d = await r.json();
+      showToast(d.error ?? "Gagal update stok", "err");
+    }
+    setSaving(false);
+  };
+
+  const resetStok = async (item_id: number, nama: string) => {
+    if (!confirm(`Reset stok "${nama}" ke 0? Tindakan ini tidak bisa dibatalkan.`)) return;
+    setResetting(item_id);
+    const r = await fetch(`/api/stocks/${item_id}`, { method: "DELETE" });
+    if (r.ok) showToast(`Stok ${nama} direset ke 0`);
+    else showToast("Gagal reset stok", "err");
+    setResetting(null);
+    load();
+  };
+
+  // Preview qty result
+  const previewQty = () => {
+    if (!editing) return null;
+    const n = Number(qty) || 0;
+    if (editMode === "set") return n;
+    if (editMode === "add") return editing.qty_available + n;
+    return Math.max(0, editing.qty_available - n);
   };
 
   const filtered = stocks.filter(s => !search || s.item?.nama?.toLowerCase().includes(search.toLowerCase()));
@@ -48,6 +94,21 @@ export default function StokPage() {
 
   return (
     <div className="animate-in">
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+          background: toast.type === "ok" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+          border: `1px solid ${toast.type === "ok" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+          color: toast.type === "ok" ? "#34d399" : "#f87171",
+          animation: "fadeSlideUp 0.2s ease",
+          backdropFilter: "blur(8px)",
+        }}>
+          {toast.type === "ok" ? "✓ " : "⚠ "}{toast.msg}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Stok & Kuota</h2>
@@ -88,7 +149,7 @@ export default function StokPage() {
               <th style={{ textAlign: "center" }}>Tersedia</th>
               <th style={{ textAlign: "center" }}>Terjual</th>
               <th style={{ textAlign: "center" }}>Reserved</th>
-              <th style={{ width: 80 }}>Aksi</th>
+              <th style={{ width: 130 }}>Aksi</th>
             </tr></thead>
             <tbody>
               {filtered.map(s => (
@@ -113,7 +174,19 @@ export default function StokPage() {
                   <td style={{ textAlign: "center", color: "var(--text-secondary)" }}>{s.qty_sold}</td>
                   <td style={{ textAlign: "center", color: "#fbbf24" }}>{s.qty_reserved}</td>
                   <td>
-                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>Restock</button>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => openEdit(s)}>
+                        <Icons.Edit /> Update
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm btn-icon"
+                        title="Reset ke 0"
+                        disabled={resetting === s.item_id}
+                        onClick={() => resetStok(s.item_id, s.item?.nama)}
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -126,15 +199,51 @@ export default function StokPage() {
       {editing && (
         <Modal title={`Update Stok: ${editing.item?.nama}`} onClose={() => setEditing(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Current info */}
             <div style={{ padding: 14, borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Stok saat ini: <strong style={{ color: "var(--text-primary)" }}>{editing.qty_available} {editing.item?.satuan}</strong></p>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Total terjual: {editing.qty_sold} • Reserved: {editing.qty_reserved}</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Stok saat ini: <strong style={{ color: "var(--text-primary)", fontSize: 16 }}>{editing.qty_available} {editing.item?.satuan}</strong></p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Terjual: {editing.qty_sold} • Reserved: {editing.qty_reserved}</p>
             </div>
-            <Field label="Stok / Kuota Baru" required>
-              <input className="input" type="number" min="0" value={qty} onChange={e => setQty(e.target.value)} placeholder="Masukkan jumlah stok baru..." />
+
+            {/* Mode selector */}
+            <Field label="Mode Update">
+              <div style={{ display: "flex", gap: 8 }}>
+                {([["set", "⚙ Set Langsung"], ["add", "+ Tambah"], ["subtract", "− Kurangi"]] as [EditMode, string][]).map(([m, label]) => (
+                  <button
+                    key={m}
+                    className={`btn btn-sm ${editMode === m ? "btn-primary" : "btn-secondary"}`}
+                    style={{ flex: 1, justifyContent: "center" }}
+                    onClick={() => setEditMode(m)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </Field>
+
+            <Field label={editMode === "set" ? "Jumlah Stok Baru" : editMode === "add" ? "Tambah Berapa?" : "Kurangi Berapa?"} required>
+              <input
+                className="input"
+                type="number"
+                min="0"
+                value={qty}
+                onChange={e => setQty(e.target.value)}
+                placeholder={editMode === "set" ? "Masukkan jumlah stok baru..." : "Masukkan jumlah..."}
+              />
+            </Field>
+
+            {/* Preview */}
+            {qty !== "" && (
+              <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(56,189,248,0.06)", border: "1px solid rgba(56,189,248,0.2)", fontSize: 13 }}>
+                Hasil: <strong style={{ color: "#38bdf8" }}>{previewQty()} {editing.item?.satuan}</strong>
+                {editMode !== "set" && <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>(dari {editing.qty_available})</span>}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving}><Icons.Save /> {saving ? "Menyimpan..." : "Update Stok"}</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || qty === ""}>
+                <Icons.Save /> {saving ? "Menyimpan..." : "Update Stok"}
+              </button>
               <button className="btn btn-secondary" onClick={() => setEditing(null)}>Batal</button>
             </div>
           </div>
