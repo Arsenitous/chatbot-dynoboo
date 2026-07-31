@@ -2,8 +2,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   const { data, error } = await supabase.from("item_types").select("*").order("id");
   if (error) return Response.json({ error: error.message }, { status: 500 });
