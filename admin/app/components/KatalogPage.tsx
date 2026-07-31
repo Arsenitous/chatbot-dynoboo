@@ -160,7 +160,7 @@ export default function KatalogPage() {
       {(adding || !!editing) && (
         <Modal title={editing ? `Edit: ${editing.nama}` : "Tambah Item Katalog"} onClose={() => { setAdding(false); setEditing(null); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Tipe Item">
+            <Field label="Tipe Item" required>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <CustomSelect value={form.item_type_id} onChange={v => setForm({ ...form, item_type_id: v })} options={[{ value: "", label: "— Pilih Tipe —" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))]} />
@@ -186,7 +186,7 @@ export default function KatalogPage() {
               </div>
             </Field>
             <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.nama || !form.harga_normal}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.nama || !form.harga_normal || !form.item_type_id}>
                 <Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
               <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
