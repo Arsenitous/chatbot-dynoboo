@@ -1,9 +1,7 @@
 import { NextRequest } from "next/server";
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { supabase } from "@/lib/supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
-const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@dynoboo.com";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 function fmtRp(n: number) {
@@ -94,6 +92,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { customer_email } = await request.json();
   if (!customer_email) return Response.json({ error: "Email customer diperlukan" }, { status: 400 });
 
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
+
+  if (!gmailUser || !gmailPass || gmailUser === "emailku@gmail.com" || gmailPass.includes("xxxx")) {
+    return Response.json({
+      error: "Konfigurasi Gmail belum lengkap di .env.local! Silakan atur GMAIL_USER dan GMAIL_APP_PASSWORD (16 karakter password aplikasi Google)."
+    }, { status: 400 });
+  }
+
   const { data: invoice, error: invErr } = await supabase
     .from("invoices")
     .select("*, invoice_type:invoice_types(*), invoice_items(*)")
@@ -105,16 +112,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const comp = company ?? { nama_toko: "DynoBoo", logo_url: null, instagram: "@dynoboo", no_hp: null };
 
   const html = buildEmailHtml(invoice, comp);
-  const { error: emailErr } = await resend.emails.send({
-    from: `${comp.nama_toko} <${FROM}>`,
-    to: [customer_email],
-    subject: `Invoice ${invoice.invoice_no} dari ${comp.nama_toko}`,
-    html,
-  });
 
-  if (emailErr) return Response.json({ error: (emailErr as Error).message ?? "Gagal mengirim email" }, { status: 500 });
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: gmailUser,
+        pass: gmailPass,
+      },
+    });
 
-  // Save email to invoice record
-  await supabase.from("invoices").update({ customer_email }).eq("id", id);
-  return Response.json({ ok: true, to: customer_email });
+    await transporter.sendMail({
+      from: `"${comp.nama_toko}" <${gmailUser}>`,
+      to: customer_email,
+      subject: `Invoice ${invoice.invoice_no} dari ${comp.nama_toko}`,
+      html,
+    });
+
+    // Save email to invoice record
+    await supabase.from("invoices").update({ customer_email }).eq("id", id);
+    return Response.json({ ok: true, to: customer_email });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : "Gagal mengirim email via Nodemailer";
+    return Response.json({ error: errMsg }, { status: 500 });
+  }
 }
