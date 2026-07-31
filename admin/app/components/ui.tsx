@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 export const Icons = {
@@ -72,9 +73,27 @@ export function CustomSelect({ value, onChange, options }: { value: string; onCh
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// ─── Modal (Portal — renders at document.body to escape all parent stacking contexts) ───
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+
+  // Close on Escape key
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Prevent body scroll while open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-box"
@@ -87,7 +106,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
         </div>
         <div className="modal-box-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
