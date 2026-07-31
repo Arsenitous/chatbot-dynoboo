@@ -14,7 +14,7 @@ export default function KatalogPage() {
   const [filterType, setFilterType] = useState("");
 
   const [addingTypeModal, setAddingTypeModal] = useState(false);
-  const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "📦" });
+  const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "" });
 
   const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
   const [form, setForm] = useState(emptyForm);

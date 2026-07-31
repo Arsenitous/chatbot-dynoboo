@@ -1,6 +1,7 @@
-export const dynamic = 'force-dynamic';
 import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 /**
  * One-time setup endpoint: buat superadmin pertama di database.

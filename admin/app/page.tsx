@@ -872,6 +872,7 @@ type NotifBellProps = {
 
 function NotifBell({ notifs, setNotifs, notifOpen, setNotifOpen, onNavigate }: NotifBellProps) {
   const unread = notifs.filter(n => !n.read).length;
+  const dismissed = useRef(new Set<string>());
 
   // Auto-fetch notifications on mount and every 60s
   useEffect(() => {
@@ -931,6 +932,7 @@ function NotifBell({ notifs, setNotifs, notifOpen, setNotifOpen, onNavigate }: N
         setNotifs(prev => {
           const merged = [...prev];
           for (const n of newNotifs) {
+            if (dismissed.current.has(n.id)) continue;
             const idx = merged.findIndex(p => p.id === n.id);
             if (idx >= 0) {
               merged[idx] = { ...n, read: merged[idx].read };
@@ -949,7 +951,12 @@ function NotifBell({ notifs, setNotifs, notifOpen, setNotifOpen, onNavigate }: N
 
   const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })));
   const markRead = (id: string) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  const clearAll = () => setNotifs([]);
+  const clearAll = () => {
+    setNotifs(prev => {
+      prev.forEach(n => dismissed.current.add(n.id));
+      return [];
+    });
+  };
 
   const handleNotifClick = (n: Notif) => {
     markRead(n.id);

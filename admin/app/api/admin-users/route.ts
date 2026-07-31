@@ -1,8 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { data, error } = await supabase
