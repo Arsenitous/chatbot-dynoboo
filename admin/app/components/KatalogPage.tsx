@@ -13,6 +13,9 @@ export default function KatalogPage() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
 
+  const [addingTypeModal, setAddingTypeModal] = useState(false);
+  const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "📦" });
+
   const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
   const [form, setForm] = useState(emptyForm);
 
@@ -59,20 +62,21 @@ export default function KatalogPage() {
     setSaving(false); setAdding(false); setEditing(null); load();
   };
 
-  const handleAddType = async () => {
-    const nama = window.prompt("Masukkan nama Tipe Item baru (contoh: Workshop, Kerajinan Tangan):");
-    if (!nama) return;
-    const icon = window.prompt("Masukkan emoji untuk icon (contoh: 🎨, 🧶):", "📦") || "📦";
+  const saveNewType = async () => {
+    if (!newTypeForm.nama) return;
+    setSaving(true);
     const r = await fetch("/api/item-types", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nama, icon })
+      body: JSON.stringify(newTypeForm)
     });
+    setSaving(false);
     if (r.ok) {
       const newType = await r.json();
       setItemTypes(prev => [...prev, newType]);
       setForm(f => ({ ...f, item_type_id: String(newType.id) }));
+      setAddingTypeModal(false);
     } else {
-      alert("Gagal menambahkan tipe item.");
+      alert("Gagal menambahkan tipe item. Mungkin nama tersebut sudah ada?");
     }
   };
 
@@ -165,7 +169,7 @@ export default function KatalogPage() {
                 <div style={{ flex: 1 }}>
                   <CustomSelect value={form.item_type_id} onChange={v => setForm({ ...form, item_type_id: v })} options={[{ value: "", label: "— Pilih Tipe —" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))]} />
                 </div>
-                <button className="btn btn-secondary" style={{ padding: "0 14px" }} onClick={handleAddType} title="Tambah Tipe Baru">
+                <button className="btn btn-secondary" style={{ padding: "0 14px" }} onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }} title="Tambah Tipe Baru">
                   <Icons.Plus />
                 </button>
               </div>
@@ -190,6 +194,26 @@ export default function KatalogPage() {
                 <Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
               <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Tambah Tipe Item */}
+      {addingTypeModal && (
+        <Modal title="Tambah Tipe Item Baru" onClose={() => setAddingTypeModal(false)} wide={false}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Nama Tipe" required>
+              <input className="input" placeholder="Contoh: Workshop, Kerajinan Tangan..." value={newTypeForm.nama} onChange={e => setNewTypeForm({ ...newTypeForm, nama: e.target.value })} autoFocus />
+            </Field>
+            <Field label="Icon (Emoji)" required>
+              <input className="input" placeholder="📦" value={newTypeForm.icon} onChange={e => setNewTypeForm({ ...newTypeForm, icon: e.target.value })} />
+            </Field>
+            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveNewType} disabled={saving || !newTypeForm.nama}>
+                <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Tipe"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setAddingTypeModal(false)}>Batal</button>
             </div>
           </div>
         </Modal>
