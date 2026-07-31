@@ -72,26 +72,25 @@ export function CustomSelect({ value, onChange, options }: { value: string; onCh
   );
 }
 
-// ─── Modal ───────────────────────────────────────────────────────────────────
+// ─── Modal ────────────────────────────────────────────────────────────────────
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ alignItems: "center" }}>
+    <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-box"
-        style={{ maxWidth: wide ? 800 : 600, width: "100%", display: "flex", flexDirection: "column", maxHeight: "90vh" }}
+        style={{ maxWidth: wide ? 820 : 600 }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+        <div className="modal-box-header">
           <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>{title}</h3>
           <button className="btn btn-secondary btn-sm btn-icon" onClick={onClose}><Icons.X /></button>
         </div>
-        {/* Scrollable body */}
-        <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>{children}</div>
+        <div className="modal-box-body">{children}</div>
       </div>
     </div>
   );
 }
+
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 export function StatCard({ label, value, color, bg, icon, sub }: { label: string; value: string | number; color: string; bg: string; icon: React.ReactNode; sub?: string }) {
