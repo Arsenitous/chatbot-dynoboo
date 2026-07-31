@@ -318,12 +318,29 @@ body { background: var(--bg-base); color: var(--text-primary); font-family: var(
 
 /* ─── Print Media Query ───────────────────────────────────────────────────── */
 @media print {
+  /* Remove browser default headers/footers (URL, date, page number) */
+  @page {
+    margin: 0.5cm;
+    size: A4;
+  }
+
   .no-print { display: none !important; }
   .sidebar { display: none !important; }
   .topbar { display: none !important; }
   .main-content { height: auto !important; overflow: visible !important; }
   .page-content { padding: 0 !important; overflow: visible !important; }
   .admin-layout { display: block !important; }
-  .invoice-preview { box-shadow: none !important; border-radius: 0 !important; padding: 32px !important; max-width: 100% !important; margin: 0 !important; }
+  .invoice-preview { box-shadow: none !important; border-radius: 0 !important; padding: 24px 32px !important; max-width: 100% !important; margin: 0 !important; }
   body { background: white !important; }
+
+  /* Hide AI assistant floating button and panel */
+  button[title="Buka AI Assistant"],
+  button[title="Tutup AI Assistant"],
+  .ai-chat-panel { display: none !important; }
+
+  /* Hide mobile overlay */
+  .mobile-overlay { display: none !important; }
+
+  /* Hide toast notifications */
+  [style*="position: fixed"][style*="bottom: 24"] { display: none !important; }
 }

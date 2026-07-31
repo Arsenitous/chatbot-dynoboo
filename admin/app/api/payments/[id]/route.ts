@@ -14,10 +14,11 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     const { data: invoice } = await supabase.from("invoices").select("grand_total").eq("id", pmt.invoice_id).single();
     const totalPaid = (allPayments ?? []).reduce((s, p) => s + Number(p.jumlah), 0);
     const grandTotal = Number(invoice?.grand_total ?? 0);
+    const sisaTagihan = Math.max(0, grandTotal - totalPaid);
     let newStatus = "UNPAID";
     if (totalPaid >= grandTotal && grandTotal > 0) newStatus = "PAID";
     else if (totalPaid > 0) newStatus = "DP";
-    await supabase.from("invoices").update({ dp_amount: totalPaid, status_pembayaran: newStatus }).eq("id", pmt.invoice_id);
+    await supabase.from("invoices").update({ dp_amount: totalPaid, sisa_tagihan: sisaTagihan, status_pembayaran: newStatus }).eq("id", pmt.invoice_id);
   }
   return Response.json({ ok: true });
 }

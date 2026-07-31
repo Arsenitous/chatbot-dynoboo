@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import type { Invoice, InvoiceType } from "@/lib/supabase";
-import { Icons, CustomSelect, InvoiceStatusBadge, fmtRp } from "./ui";
+import { Icons, CustomSelect, InvoiceStatusBadge, fmtRp, Modal, Field, useToast } from "./ui";
 
 type Props = {
   onViewInvoice: (id: number) => void;
@@ -9,14 +9,31 @@ type Props = {
 };
 
 const STATUS_OPTIONS = [
-  { value: "", label: "Semua Status" },
+  { value: "", label: "Invoice Aktif (Default)" },
   { value: "UNPAID", label: "○ UNPAID", color: "#f87171" },
   { value: "DP", label: "◑ DP", color: "#fbbf24" },
   { value: "PAID", label: "✓ PAID", color: "#34d399" },
-  { value: "CANCELLED", label: "✕ CANCELLED", color: "#94a3b8" },
+  { value: "CANCELLED", label: "✕ Dibatalkan (CANCELLED)", color: "#94a3b8" },
+  { value: "ALL", label: "Semua (Termasuk Dibatalkan)" },
+];
+
+const MONTH_OPTIONS = [
+  { value: "1", label: "Januari" },
+  { value: "2", label: "Februari" },
+  { value: "3", label: "Maret" },
+  { value: "4", label: "April" },
+  { value: "5", label: "Mei" },
+  { value: "6", label: "Juni" },
+  { value: "7", label: "Juli" },
+  { value: "8", label: "Agustus" },
+  { value: "9", label: "September" },
+  { value: "10", label: "Oktober" },
+  { value: "11", label: "November" },
+  { value: "12", label: "Desember" },
 ];
 
 export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Props) {
+  const { showToast } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [types, setTypes] = useState<InvoiceType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,50 +41,223 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
   const [filterType, setFilterType] = useState("");
   const [search, setSearch] = useState("");
 
+  // Modal Pembatalan State
+  const [targetCancelInvoice, setTargetCancelInvoice] = useState<Invoice | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Modal Laporan State
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportMode, setReportMode] = useState<"ALL" | "MONTHLY" | "YEARLY">("MONTHLY");
+  const [startMonth, setStartMonth] = useState(String(new Date().getMonth() + 1));
+  const [endMonth, setEndMonth] = useState(String(new Date().getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
+
+  const currentYr = new Date().getFullYear();
+  const YEAR_OPTIONS = [
+    { value: String(currentYr + 1), label: String(currentYr + 1) },
+    { value: String(currentYr), label: String(currentYr) },
+    { value: String(currentYr - 1), label: String(currentYr - 1) },
+    { value: String(currentYr - 2), label: String(currentYr - 2) },
+  ];
+
   const load = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterType) params.set("type_id", filterType);
-    const [invRes, typRes] = await Promise.all([fetch("/api/invoices?" + params), fetch("/api/invoice-types")]);
-    setInvoices(await invRes.json());
-    setTypes(await typRes.json());
+    const [invRes, typRes] = await Promise.all([
+      fetch("/api/invoices"),
+      fetch("/api/invoice-types")
+    ]);
+    if (invRes.ok) setInvoices(await invRes.json());
+    if (typRes.ok) setTypes(await typRes.json());
     setLoading(false);
-  }, [filterStatus, filterType]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = invoices.filter(inv => !search || inv.invoice_no.includes(search) || inv.customer_name.toLowerCase().includes(search.toLowerCase()));
+  // Client-side filtering
+  const filtered = invoices.filter(inv => {
+    const matchesSearch = !search || inv.invoice_no.toLowerCase().includes(search.toLowerCase()) || inv.customer_name.toLowerCase().includes(search.toLowerCase());
+    const matchesType = !filterType || String(inv.invoice_type_id) === filterType;
 
+    let matchesStatus = true;
+    if (filterStatus === "") {
+      // Default: Hanya tampilkan invoice aktif (bukan CANCELLED)
+      matchesStatus = inv.status_pembayaran !== "CANCELLED";
+    } else if (filterStatus === "ALL") {
+      matchesStatus = true;
+    } else {
+      matchesStatus = inv.status_pembayaran === filterStatus;
+    }
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  const countActive = invoices.filter(i => i.status_pembayaran !== "CANCELLED").length;
   const totalRevenue = invoices.filter(i => i.status_pembayaran === "PAID").reduce((s, i) => s + Number(i.grand_total), 0);
   const totalUnpaid = invoices.filter(i => ["UNPAID", "DP"].includes(i.status_pembayaran)).reduce((s, i) => s + Number(i.sisa_tagihan), 0);
   const countCancelled = invoices.filter(i => i.status_pembayaran === "CANCELLED").length;
 
   const fmt = (d: string) => new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 
-  const handlePrintReport = () => {
+  // Aksi Pembatalan Invoice
+  const doCancelInvoice = async () => {
+    if (!targetCancelInvoice) return;
+    setCancelling(true);
+    const res = await fetch(`/api/invoices/${targetCancelInvoice.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status_pembayaran: "CANCELLED" }),
+    });
+    setCancelling(false);
+    if (res.ok) {
+      showToast(`🚫 Invoice ${targetCancelInvoice.invoice_no} telah dibatalkan`);
+      setTargetCancelInvoice(null);
+      load();
+    } else {
+      showToast("Gagal membatalkan invoice. Coba lagi.", "err");
+    }
+  };
+
+  // Pulihkan Invoice yang Dibatalkan
+  const doRestoreInvoice = async (inv: Invoice) => {
+    const res = await fetch(`/api/invoices/${inv.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status_pembayaran: "UNPAID" }),
+    });
+    if (res.ok) {
+      showToast(`✅ Invoice ${inv.invoice_no} dipulihkan ke UNPAID`);
+      load();
+    } else {
+      showToast("Gagal memulihkan invoice.", "err");
+    }
+  };
+
+  const handleGenerateReport = () => {
+    let reportList = [...invoices];
+    let filterTitle = "Semua Periode (All)";
+
+    if (reportMode === "MONTHLY") {
+      const yr = Number(selectedYear);
+      const sM = Number(startMonth);
+      const eM = Number(endMonth);
+      const minM = Math.min(sM, eM);
+      const maxM = Math.max(sM, eM);
+
+      reportList = reportList.filter(inv => {
+        const d = new Date(inv.invoice_date);
+        const invYr = d.getFullYear();
+        const invMo = d.getMonth() + 1;
+        return invYr === yr && invMo >= minM && invMo <= maxM;
+      });
+
+      const startLabel = MONTH_OPTIONS.find(m => m.value === String(minM))?.label ?? "";
+      const endLabel = MONTH_OPTIONS.find(m => m.value === String(maxM))?.label ?? "";
+      filterTitle = minM === maxM
+        ? `Bulan ${startLabel} ${yr}`
+        : `Bulan ${startLabel} s/d ${endLabel} ${yr}`;
+    } else if (reportMode === "YEARLY") {
+      const yr = Number(selectedYear);
+      reportList = reportList.filter(inv => {
+        const d = new Date(inv.invoice_date);
+        return d.getFullYear() === yr;
+      });
+      filterTitle = `Tahun ${yr}`;
+    }
+
+    const totalInv = reportList.length;
+    const grandTotalSum = reportList.reduce((s, i) => s + Number(i.grand_total), 0);
+    const paidSum = reportList.filter(i => i.status_pembayaran === "PAID").reduce((s, i) => s + Number(i.grand_total), 0);
+    const unpaidSum = reportList.filter(i => ["UNPAID", "DP"].includes(i.status_pembayaran)).reduce((s, i) => s + Number(i.sisa_tagihan), 0);
+
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const rows = filtered.map(inv => `
+
+    const rowsHtml = reportList.map(inv => `
       <tr>
-        <td>${inv.invoice_no}</td>
+        <td style="font-family:monospace;font-weight:bold;color:#7c3aed">${inv.invoice_no}</td>
         <td>${fmt(inv.invoice_date)}</td>
-        <td>${inv.customer_name}</td>
+        <td><strong>${inv.customer_name}</strong>${inv.customer_contact ? `<br><small style="color:#64748b">${inv.customer_contact}</small>` : ""}</td>
         <td>${inv.invoice_type?.nama ?? "—"}</td>
-        <td style="text-align:right">${fmtRp(inv.grand_total)}</td>
-        <td><span style="color:${inv.status_pembayaran === "PAID" ? "#10b981" : inv.status_pembayaran === "DP" ? "#f59e0b" : inv.status_pembayaran === "CANCELLED" ? "#94a3b8" : "#ef4444"}">${inv.status_pembayaran}</span></td>
-      </tr>`).join("");
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Laporan Penjualan DynoBoo</title>
-    <style>body{font-family:Arial,sans-serif;padding:32px;color:#1e293b}h1{color:#7c3aed;margin-bottom:4px}p{color:#64748b;margin:0 0 24px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;padding:10px 12px;text-align:left;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}.footer{margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8}</style>
-    </head><body>
-    <h1>DynoBoo — Laporan Penjualan</h1>
-    <p>Periode: ${filterStatus || "Semua Status"} • Dicetak: ${new Date().toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})}</p>
-    <table><thead><tr><th>No Invoice</th><th>Tanggal</th><th>Customer</th><th>Tipe</th><th>Grand Total</th><th>Status</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <div class="footer"><strong>Total Invoice:</strong> ${filtered.length} &nbsp;|&nbsp; <strong>Revenue (PAID):</strong> ${fmtRp(totalRevenue)} &nbsp;|&nbsp; <strong>Belum Lunas:</strong> ${fmtRp(totalUnpaid)}</div>
-    </body></html>`);
+        <td style="text-align:right;font-weight:600">${fmtRp(inv.grand_total)}</td>
+        <td style="text-align:right">${fmtRp(inv.dp_amount ?? 0)}</td>
+        <td style="text-align:right;color:${inv.sisa_tagihan > 0 ? '#d97706' : '#10b981'};font-weight:600">${fmtRp(inv.sisa_tagihan ?? 0)}</td>
+        <td style="text-align:center"><span style="padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;background:${inv.status_pembayaran === "PAID" ? "#d1fae5" : inv.status_pembayaran === "DP" ? "#fef3c7" : inv.status_pembayaran === "CANCELLED" ? "#f1f5f9" : "#fee2e2"};color:${inv.status_pembayaran === "PAID" ? "#065f46" : inv.status_pembayaran === "DP" ? "#92400e" : inv.status_pembayaran === "CANCELLED" ? "#475569" : "#991b1b"}">${inv.status_pembayaran}</span></td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Penjualan DynoBoo - ${filterTitle}</title>
+  <style>
+    @page { size: A4 landscape; margin: 1cm; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #0f172a; background: white; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #7c3aed; padding-bottom: 16px; margin-bottom: 20px; }
+    .title-box h1 { margin: 0; font-size: 24px; color: #7c3aed; font-weight: 800; }
+    .title-box p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+    .meta-box { text-align: right; font-size: 12px; color: #64748b; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; }
+    .stat-card .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+    .stat-card .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600; }
+    
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
+    th { background: #f1f5f9; color: #475569; padding: 10px 12px; text-align: left; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; border-bottom: 2px solid #cbd5e1; }
+    td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+    tr:nth-child(even) td { background: #fafafa; }
+    
+    .footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title-box">
+      <h1>DynoBoo — Laporan Penjualan</h1>
+      <p>Periode: <strong>${filterTitle}</strong></p>
+    </div>
+    <div class="meta-box">
+      <p>Tanggal Cetak: <strong>${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</strong></p>
+      <p>Dicetak Oleh: <strong>superadmin</strong></p>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="lbl">Total Invoice</div><div class="val" style="color:#7c3aed">${totalInv}</div></div>
+    <div class="stat-card"><div class="lbl">Total Omset (Grand Total)</div><div class="val" style="color:#2563eb">${fmtRp(grandTotalSum)}</div></div>
+    <div class="stat-card"><div class="lbl">Revenue (PAID)</div><div class="val" style="color:#16a34a">${fmtRp(paidSum)}</div></div>
+    <div class="stat-card"><div class="lbl">Belum Lunas / Sisa</div><div class="val" style="color:#d97706">${fmtRp(unpaidSum)}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>No Invoice</th>
+        <th>Tanggal</th>
+        <th>Customer</th>
+        <th>Tipe</th>
+        <th style="text-align:right">Grand Total</th>
+        <th style="text-align:right">DP / Dibayar</th>
+        <th style="text-align:right">Sisa Tagihan</th>
+        <th style="text-align:center">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml.length > 0 ? rowsHtml : `<tr><td colSpan="8" style="text-align:center;padding:32px;color:#94a3b8">Tidak ada data invoice untuk periode ini.</td></tr>`}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>DynoBoo Admin Panel — Laporan Resmi Penjualan</div>
+    <div>Halaman 1 dari 1</div>
+  </div>
+
+  <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>`);
     printWindow.document.close();
-    printWindow.print();
+    setShowReportModal(false);
   };
 
   const typeOptions = [{ value: "", label: "Semua Tipe" }, ...types.map(t => ({ value: String(t.id), label: t.nama }))];
@@ -80,23 +270,41 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>History penjualan DynoBoo</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={handlePrintReport}><Icons.Printer /> Laporan PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowReportModal(true)}><Icons.Printer /> Laporan PDF</button>
           <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
           <button className="btn btn-primary btn-sm" onClick={onCreateInvoice}><Icons.Plus /> Buat Invoice</button>
         </div>
       </div>
 
-      {/* Summary bar */}
+      {/* Summary bar - Clickable Cards for Filtering */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Total Invoice", value: String(invoices.length), color: "#a78bfa", bg: "rgba(124,58,237,0.12)" },
-          { label: "Revenue (PAID)", value: fmtRp(totalRevenue), color: "#34d399", bg: "rgba(52,211,153,0.12)" },
-          { label: "Belum Lunas", value: fmtRp(totalUnpaid), color: "#fbbf24", bg: "rgba(245,158,11,0.12)" },
-          { label: "Dibatalkan", value: String(countCancelled), color: "#94a3b8", bg: "rgba(100,116,139,0.12)" },
+          { label: "Total Invoice", value: String(countActive), color: "#a78bfa", bg: "rgba(124,58,237,0.12)", filterKey: "", active: filterStatus === "" },
+          { label: "Revenue (PAID)", value: fmtRp(totalRevenue), color: "#34d399", bg: "rgba(52,211,153,0.12)", filterKey: "PAID", active: filterStatus === "PAID" },
+          { label: "Belum Lunas", value: fmtRp(totalUnpaid), color: "#fbbf24", bg: "rgba(245,158,11,0.12)", filterKey: "UNPAID", active: filterStatus === "UNPAID" },
+          { label: "Dibatalkan", value: String(countCancelled), color: "#f87171", bg: "rgba(239,68,68,0.12)", filterKey: "CANCELLED", active: filterStatus === "CANCELLED" },
         ].map(s => (
-          <div key={s.label} className="card" style={{ padding: "12px 16px" }}>
-            <p style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</p>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{s.label}</p>
+          <div
+            key={s.label}
+            className="card"
+            style={{
+              padding: "14px 16px",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              border: s.active ? `1.5px solid ${s.color}` : "1px solid var(--border)",
+              boxShadow: s.active ? `0 0 16px ${s.color}30` : "none",
+              background: s.active ? `${s.color}10` : "var(--bg-card)",
+            }}
+            onClick={() => setFilterStatus(s.filterKey)}
+            title={`Klik untuk memfilter: ${s.label}`}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <p style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</p>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${s.color}20`, color: s.color }}>
+                {s.active ? "Aktif" : "Lihat →"}
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{s.label}</p>
           </div>
         ))}
       </div>
@@ -107,7 +315,7 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
           <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari no invoice atau nama customer..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div style={{ width: 160 }}><CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} /></div>
+        <div style={{ width: 220 }}><CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} /></div>
         <div style={{ width: 180 }}><CustomSelect value={filterType} onChange={setFilterType} options={typeOptions} /></div>
       </div>
 
@@ -123,7 +331,7 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
               <th>Tipe</th>
               <th>Grand Total</th>
               <th>Status</th>
-              <th style={{ width: 80 }}>Aksi</th>
+              <th style={{ width: 120 }}>Aksi</th>
             </tr></thead>
             <tbody>
               {filtered.map(inv => (
@@ -138,15 +346,187 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
                   <td style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmtRp(inv.grand_total)}</td>
                   <td><InvoiceStatusBadge status={inv.status_pembayaran} /></td>
                   <td onClick={e => e.stopPropagation()}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => onViewInvoice(inv.id)}><Icons.Eye /></button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn btn-secondary btn-sm btn-icon" title="Lihat Detail" onClick={() => onViewInvoice(inv.id)}>
+                        <Icons.Eye />
+                      </button>
+                      {inv.status_pembayaran !== "CANCELLED" ? (
+                        <button
+                          className="btn btn-sm btn-icon"
+                          style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
+                          title="Batalkan Invoice"
+                          onClick={() => setTargetCancelInvoice(inv)}
+                        >
+                          <Icons.X />
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-sm btn-icon"
+                          style={{ background: "rgba(16,185,129,0.12)", color: "#34d399", border: "1px solid rgba(16,185,129,0.3)" }}
+                          title="Pulihkan Invoice"
+                          onClick={() => doRestoreInvoice(inv)}
+                        >
+                          <Icons.Refresh />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>🧾 Belum ada invoice</td></tr>}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>
+                    {filterStatus === "CANCELLED" ? "🚫 Tidak ada invoice yang dibatalkan" : "🧾 Belum ada invoice"}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* ── Modal Konfirmasi Pembatalan Invoice ── */}
+      {targetCancelInvoice && (
+        <Modal title="Konfirmasi Pembatalan Invoice" onClose={() => setTargetCancelInvoice(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                <span style={{ fontSize: 26 }}>🚫</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>{targetCancelInvoice.invoice_no}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Customer: <strong>{targetCancelInvoice.customer_name}</strong> • Total: <strong style={{ color: "#a78bfa" }}>{fmtRp(targetCancelInvoice.grand_total)}</strong></p>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", borderTop: "1px solid rgba(239,68,68,0.2)", paddingTop: 10 }}>
+                Status saat ini: <strong style={{ color: "#fbbf24" }}>{targetCancelInvoice.status_pembayaran}</strong>
+              </p>
+            </div>
+
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Invoice yang dibatalkan akan diubah statusnya menjadi <strong>CANCELLED</strong> dan disembunyikan dari daftar invoice aktif. Anda tetap dapat melihatnya melalui kartu <strong>"Dibatalkan"</strong>.</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <button
+                className="btn btn-sm"
+                style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.25),rgba(220,38,38,0.2))", color: "#f87171", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }}
+                onClick={doCancelInvoice}
+                disabled={cancelling}
+              >
+                {cancelling ? "Proses..." : "Ya, Batalkan Invoice"}
+              </button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setTargetCancelInvoice(null)}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Filter Laporan PDF ── */}
+      {showReportModal && (
+        <Modal title="Cetak Laporan Penjualan PDF" onClose={() => setShowReportModal(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Field label="Pilih Mode Filter Periode">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    justifyContent: "center",
+                    background: reportMode === "MONTHLY" ? "rgba(56,189,248,0.18)" : "var(--bg-card-2)",
+                    border: `1px solid ${reportMode === "MONTHLY" ? "#38bdf8" : "var(--border)"}`,
+                    color: reportMode === "MONTHLY" ? "#38bdf8" : "var(--text-secondary)",
+                    fontWeight: reportMode === "MONTHLY" ? 700 : 500,
+                  }}
+                  onClick={() => setReportMode("MONTHLY")}
+                >
+                  Per Bulan
+                </button>
+
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    justifyContent: "center",
+                    background: reportMode === "YEARLY" ? "rgba(56,189,248,0.18)" : "var(--bg-card-2)",
+                    border: `1px solid ${reportMode === "YEARLY" ? "#38bdf8" : "var(--border)"}`,
+                    color: reportMode === "YEARLY" ? "#38bdf8" : "var(--text-secondary)",
+                    fontWeight: reportMode === "YEARLY" ? 700 : 500,
+                  }}
+                  onClick={() => setReportMode("YEARLY")}
+                >
+                  Per Tahun
+                </button>
+
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    justifyContent: "center",
+                    background: reportMode === "ALL" ? "rgba(56,189,248,0.18)" : "var(--bg-card-2)",
+                    border: `1px solid ${reportMode === "ALL" ? "#38bdf8" : "var(--border)"}`,
+                    color: reportMode === "ALL" ? "#38bdf8" : "var(--text-secondary)",
+                    fontWeight: reportMode === "ALL" ? 700 : 500,
+                  }}
+                  onClick={() => setReportMode("ALL")}
+                >
+                  Semua (All)
+                </button>
+              </div>
+            </Field>
+
+            {/* Sub-Form berdasarkan Mode */}
+            {reportMode === "MONTHLY" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, background: "var(--bg-card-2)", padding: 14, borderRadius: 10, border: "1px solid var(--border)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <Field label="Bulan Awal">
+                    <CustomSelect value={startMonth} onChange={setStartMonth} options={MONTH_OPTIONS} />
+                  </Field>
+                  <Field label="Bulan Akhir">
+                    <CustomSelect value={endMonth} onChange={setEndMonth} options={MONTH_OPTIONS} />
+                  </Field>
+                </div>
+                <Field label="Tahun">
+                  <CustomSelect value={selectedYear} onChange={setSelectedYear} options={YEAR_OPTIONS} />
+                </Field>
+              </div>
+            )}
+
+            {reportMode === "YEARLY" && (
+              <div style={{ background: "var(--bg-card-2)", padding: 14, borderRadius: 10, border: "1px solid var(--border)" }}>
+                <Field label="Pilih Tahun Laporan">
+                  <CustomSelect value={selectedYear} onChange={setSelectedYear} options={YEAR_OPTIONS} />
+                </Field>
+              </div>
+            )}
+
+            {reportMode === "ALL" && (
+              <div style={{ background: "rgba(56,189,248,0.08)", padding: 14, borderRadius: 10, border: "1px solid rgba(56,189,248,0.2)", fontSize: 13, color: "var(--text-secondary)", display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 20 }}>📊</span>
+                <span>Mencetak seluruh histori laporan transaksi tanpa batasan tanggal.</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1, justifyContent: "center", padding: "11px 0" }}
+                onClick={handleGenerateReport}
+              >
+                <Icons.Printer /> Cetak Laporan PDF
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1, justifyContent: "center", padding: "11px 0" }}
+                onClick={() => setShowReportModal(false)}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
+

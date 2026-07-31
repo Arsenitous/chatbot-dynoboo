@@ -35,6 +35,7 @@ export default function StokPage() {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState<"ALL" | "LOW_STOCK" | "TOP_SOLD">("ALL");
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
@@ -115,9 +116,23 @@ export default function StokPage() {
     return Math.max(0, editing.qty_available - n);
   };
 
-  const filtered = stocks.filter(s => !search || s.item?.nama?.toLowerCase().includes(search.toLowerCase()));
-  const lowStock = stocks.filter(s => s.qty_available <= 3 && s.item?.is_active).length;
+  const lowStock = stocks.filter(s => s.qty_available <= 3 && (s.item?.is_active ?? true)).length;
   const totalSold = stocks.reduce((sum, s) => sum + s.qty_sold, 0);
+
+  const filtered = stocks.filter(s => {
+    const matchesSearch = !search || s.item?.nama?.toLowerCase().includes(search.toLowerCase());
+    let matchesFilter = true;
+    if (stockFilter === "LOW_STOCK") {
+      matchesFilter = s.qty_available <= 3 && (s.item?.is_active ?? true);
+    } else if (stockFilter === "TOP_SOLD") {
+      matchesFilter = s.qty_sold > 0;
+    }
+    return matchesSearch && matchesFilter;
+  });
+
+  if (stockFilter === "TOP_SOLD") {
+    filtered.sort((a, b) => b.qty_sold - a.qty_sold);
+  }
 
   const modalItem = addingFrom ?? editing?.item;
   const modalTitle = addingFrom ? `Inisialisasi Stok: ${addingFrom.nama}` : editing ? `Update Stok: ${editing.item?.nama}` : "";
@@ -179,16 +194,63 @@ export default function StokPage() {
         </div>
       )}
 
-      {/* ─── Summary cards ─── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <div className="stat-card"><div className="stat-icon" style={{ background: "rgba(124,58,237,0.15)" }}><span style={{ color: "#a78bfa" }}><Icons.Package /></span></div><div><p style={{ fontSize: 22, fontWeight: 700 }}>{stocks.length}</p><p style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Item</p></div></div>
-        <div className="stat-card"><div className="stat-icon" style={{ background: "rgba(52,211,153,0.15)" }}><span style={{ color: "#34d399" }}><Icons.TrendingUp /></span></div><div><p style={{ fontSize: 22, fontWeight: 700 }}>{totalSold}</p><p style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Terjual</p></div></div>
-        <div className="stat-card"><div className="stat-icon" style={{ background: "rgba(239,68,68,0.15)" }}><span style={{ color: "#f87171" }}><Icons.AlertTriangle /></span></div><div><p style={{ fontSize: 22, fontWeight: 700, color: lowStock > 0 ? "#f87171" : undefined }}>{lowStock}</p><p style={{ fontSize: 12, color: "var(--text-muted)" }}>Stok Kritis</p></div></div>
+      {/* ─── Summary cards (Interactive Filter) ─── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
+        {[
+          { label: "Total Item", value: String(stocks.length), color: "#a78bfa", bg: "rgba(124,58,237,0.15)", icon: <Icons.Package />, filterKey: "ALL" as const },
+          { label: "Total Terjual", value: String(totalSold), color: "#34d399", bg: "rgba(52,211,153,0.15)", icon: <Icons.TrendingUp />, filterKey: "TOP_SOLD" as const },
+          { label: "Stok Kritis (≤ 3)", value: String(lowStock), color: lowStock > 0 ? "#f87171" : "var(--text-muted)", bg: "rgba(239,68,68,0.15)", icon: <Icons.AlertTriangle />, filterKey: "LOW_STOCK" as const },
+        ].map(card => {
+          const isActive = stockFilter === card.filterKey;
+          return (
+            <div
+              key={card.label}
+              className="stat-card"
+              style={{
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                border: isActive ? `1.5px solid ${card.color}` : "1px solid var(--border)",
+                boxShadow: isActive ? `0 0 16px ${card.color}35` : "none",
+                background: isActive ? `${card.color}10` : "var(--bg-card)",
+              }}
+              onClick={() => setStockFilter(card.filterKey)}
+              title={`Klik untuk memfilter: ${card.label}`}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%" }}>
+                <div className="stat-icon" style={{ background: card.bg }}>
+                  <span style={{ color: card.color }}>{card.icon}</span>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${card.color}20`, color: card.color }}>
+                  {isActive ? "Aktif" : "Lihat →"}
+                </span>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <p style={{ fontSize: 22, fontWeight: 700, color: card.color }}>{card.value}</p>
+                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{card.label}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {lowStock > 0 && (
-        <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", marginBottom: 14, display: "flex", gap: 8, alignItems: "center", color: "#f87171", fontSize: 13 }}>
-          <Icons.AlertTriangle /> <strong>{lowStock} item</strong> memiliki stok ≤ 3. Segera restock!
+      {/* Filter Status Warning Banner */}
+      {stockFilter === "LOW_STOCK" && (
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", color: "#f87171", fontSize: 13 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Icons.AlertTriangle />
+            <span>Memfilter <strong>Stok Kritis (≤ 3 Pcs)</strong>. Terdapat {lowStock} item perlu restock.</span>
+          </div>
+          <button className="btn btn-secondary btn-sm" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => setStockFilter("ALL")}>Tampilkan Semua</button>
+        </div>
+      )}
+
+      {stockFilter === "TOP_SOLD" && (
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", color: "#34d399", fontSize: 13 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Icons.TrendingUp />
+            <span>Memfilter <strong>Item Terjual</strong> (diurutkan berdasarkan penjualan tertinggi).</span>
+          </div>
+          <button className="btn btn-secondary btn-sm" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => setStockFilter("ALL")}>Tampilkan Semua</button>
         </div>
       )}
 
@@ -200,7 +262,9 @@ export default function StokPage() {
       {/* ─── SECTION 2: Stok & Kuota Table ─── */}
       <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Stok & Kuota Terkini</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {stockFilter === "LOW_STOCK" ? "Daftar Stok Kritis (≤ 3 Pcs)" : stockFilter === "TOP_SOLD" ? "Daftar Terjual Terbanyak" : "Stok & Kuota Terkini"}
+        </span>
         <div style={{ height: 1, flex: 1, background: "var(--border)" }} />
       </div>
 
@@ -254,7 +318,18 @@ export default function StokPage() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>📦 Tidak ada data stok</td></tr>}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>
+                    {stockFilter === "LOW_STOCK"
+                      ? "✅ Semua stok dalam kondisi aman (tidak ada stok kritis ≤ 3)."
+                      : stockFilter === "TOP_SOLD"
+                      ? "📦 Belum ada item yang terjual."
+                      : "📦 Tidak ada data stok"
+                    }
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}

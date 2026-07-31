@@ -29,7 +29,6 @@ export async function PUT(request: NextRequest) {
     instagram: instagram || null,
     rekening: rekening ?? [],
     logo_url: logo_url || null,
-    updated_at: new Date().toISOString(),
   };
 
   // Try to find existing active profile

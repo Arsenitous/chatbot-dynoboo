@@ -1,6 +1,66 @@
 "use client";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
+
+// ─── Toast System ─────────────────────────────────────────────────────────────
+type ToastType = "ok" | "err";
+type ToastMsg = { id: number; msg: string; type: ToastType };
+type ToastContextType = { showToast: (msg: string, type?: ToastType) => void };
+
+const ToastContext = createContext<ToastContextType | null>(null);
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+
+  const showToast = (msg: string, type: ToastType = "ok") => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+      {toasts.length > 0 && createPortal(
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none"
+        }}>
+          {toasts.map(toast => (
+            <div key={toast.id} style={{
+              padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+              background: toast.type === "ok" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+              border: `1px solid ${toast.type === "ok" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+              color: toast.type === "ok" ? "#34d399" : "#f87171",
+              backdropFilter: "blur(8px)",
+              pointerEvents: "auto",
+              animation: "toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+              display: "flex", alignItems: "center", gap: 8
+            }}>
+              <span style={{ fontSize: 16 }}>{toast.type === "ok" ? "✓" : "⚠"}</span>
+              {toast.msg}
+            </div>
+          ))}
+          <style>{`
+            @keyframes toastIn {
+              from { opacity: 0; transform: translateX(30px); }
+              to { opacity: 1; transform: translateX(0); }
+            }
+          `}</style>
+        </div>,
+        document.body
+      )}
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error("useToast must be used within ToastProvider");
+  return ctx;
+}
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 export const Icons = {
@@ -40,6 +100,7 @@ export const Icons = {
   AlertTriangle: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>,
   Send: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>,
   Book: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>,
+  CheckCircle: () => <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
 };
 
 // ─── Custom Select ────────────────────────────────────────────────────────────

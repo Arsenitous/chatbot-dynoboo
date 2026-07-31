@@ -1,9 +1,10 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import type { Item, ItemType } from "@/lib/supabase";
-import { Icons, Modal, Field, CustomSelect, fmtRp } from "./ui";
+import { Icons, Modal, Field, CustomSelect, fmtRp, useToast } from "./ui";
 
 export default function KatalogPage() {
+  const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
   const [itemTypes, setItemTypes] = useState<ItemType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,7 +15,7 @@ export default function KatalogPage() {
   const [filterType, setFilterType] = useState("");
 
   const [addingTypeModal, setAddingTypeModal] = useState(false);
-  const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "" });
+  const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "📦" });
 
   const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
   const [form, setForm] = useState(emptyForm);
@@ -56,8 +57,10 @@ export default function KatalogPage() {
     };
     if (editing) {
       await fetch(`/api/items/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Item katalog berhasil diperbarui!");
     } else {
       await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Item katalog berhasil ditambahkan!");
     }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
@@ -74,15 +77,43 @@ export default function KatalogPage() {
       const newType = await r.json();
       setItemTypes(prev => [...prev, newType]);
       setForm(f => ({ ...f, item_type_id: String(newType.id) }));
-      setAddingTypeModal(false);
+      setNewTypeForm({ nama: "", icon: "📦" });
+      showToast(`Tipe item "${newType.nama}" berhasil ditambahkan!`);
     } else {
-      alert("Gagal menambahkan tipe item. Mungkin nama tersebut sudah ada?");
+      showToast("Gagal menambahkan tipe item. Mungkin nama tersebut sudah ada?", "err");
+    }
+  };
+
+  const deleteType = async (id: number, nama: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus tipe item "${nama}"?\n\nPerhatian: Item yang terhubung ke tipe ini akan kehilangan kategori tipenya.`)) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/item-types/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setItemTypes(prev => prev.filter(t => t.id !== id));
+        if (form.item_type_id === String(id)) {
+          setForm(f => ({ ...f, item_type_id: "" }));
+        }
+        showToast(`Tipe item "${nama}" berhasil dihapus!`);
+        load();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Gagal menghapus tipe item.", "err");
+      }
+    } catch {
+      showToast("Terjadi kesalahan saat menghapus tipe item.", "err");
+    } finally {
+      setSaving(false);
     }
   };
 
   const del = async (id: number) => {
     if (!confirm("Hapus item ini? Ini akan menghapus stok terkait juga.")) return;
-    await fetch(`/api/items/${id}`, { method: "DELETE" }); load();
+    await fetch(`/api/items/${id}`, { method: "DELETE" });
+    showToast("Item katalog berhasil dihapus!");
+    load();
   };
 
   const typeOptions = [{ value: "", label: "Semua Tipe" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))];
@@ -102,6 +133,7 @@ export default function KatalogPage() {
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{items.length} item terdaftar</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }}><Icons.Layers /> Kelola Tipe</button>
           <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
           <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Item</button>
         </div>
@@ -169,7 +201,7 @@ export default function KatalogPage() {
                 <div style={{ flex: 1 }}>
                   <CustomSelect value={form.item_type_id} onChange={v => setForm({ ...form, item_type_id: v })} options={[{ value: "", label: "— Pilih Tipe —" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))]} />
                 </div>
-                <button className="btn btn-secondary" style={{ padding: "0 14px" }} onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }} title="Tambah Tipe Baru">
+                <button className="btn btn-secondary" style={{ padding: "0 14px" }} onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }} title="Kelola Tipe Item">
                   <Icons.Plus />
                 </button>
               </div>
@@ -199,21 +231,53 @@ export default function KatalogPage() {
         </Modal>
       )}
 
-      {/* Modal Tambah Tipe Item */}
+      {/* Modal Kelola & Tambah Tipe Item */}
       {addingTypeModal && (
-        <Modal title="Tambah Tipe Item Baru" onClose={() => setAddingTypeModal(false)} wide={false}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Nama Tipe" required>
-              <input className="input" placeholder="Contoh: Workshop, Kerajinan Tangan..." value={newTypeForm.nama} onChange={e => setNewTypeForm({ ...newTypeForm, nama: e.target.value })} autoFocus />
-            </Field>
-            <Field label="Icon (Emoji)" required>
-              <input className="input" placeholder="📦" value={newTypeForm.icon} onChange={e => setNewTypeForm({ ...newTypeForm, icon: e.target.value })} />
-            </Field>
-            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveNewType} disabled={saving || !newTypeForm.nama}>
-                <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Tipe"}
-              </button>
-              <button className="btn btn-secondary" onClick={() => setAddingTypeModal(false)}>Batal</button>
+        <Modal title="Kelola Tipe Item" onClose={() => setAddingTypeModal(false)} wide={false}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>
+                Tambah Tipe Item Baru
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Field label="Nama Tipe" required>
+                  <input className="input" placeholder="Contoh: Merchandise, Workshop, Tiket..." value={newTypeForm.nama} onChange={e => setNewTypeForm({ ...newTypeForm, nama: e.target.value })} autoFocus />
+                </Field>
+                <Field label="Icon (Emoji)" required>
+                  <input className="input" placeholder="📦" value={newTypeForm.icon} onChange={e => setNewTypeForm({ ...newTypeForm, icon: e.target.value })} />
+                </Field>
+                <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 4 }} onClick={saveNewType} disabled={saving || !newTypeForm.nama}>
+                  <Icons.Plus /> {saving ? "Menyimpan..." : "Tambah Tipe Baru"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: "var(--border)" }} />
+
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10, display: "block" }}>
+                Daftar Tipe Item ({itemTypes.length})
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 220, overflowY: "auto", paddingRight: 4 }}>
+                {itemTypes.map(t => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--bg-input)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>{t.icon || "📦"}</span>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{t.nama}</span>
+                    </div>
+                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteType(t.id, t.nama)} disabled={saving} title={`Hapus ${t.nama}`}>
+                      <Icons.Trash />
+                    </button>
+                  </div>
+                ))}
+                {itemTypes.length === 0 && (
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center", padding: 12 }}>Belum ada tipe item</p>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
+              <button className="btn btn-secondary" onClick={() => setAddingTypeModal(false)}>Tutup</button>
             </div>
           </div>
         </Modal>
@@ -221,3 +285,4 @@ export default function KatalogPage() {
     </div>
   );
 }
+

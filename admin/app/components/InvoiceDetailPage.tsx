@@ -71,9 +71,51 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
     if (!invoice) return;
     let phone = invoice.customer_contact?.replace(/\D/g, "") ?? "";
     if (phone.startsWith("0")) phone = "62" + phone.slice(1);
-    const itemsText = (invoice.invoice_items ?? []).map(it => `  • ${it.description} (${it.qty} ${it.satuan}) = ${fmtRp(it.total_harga)}`).join("\n");
-    const msg = `Halo *${invoice.customer_name}* 😊\n\nBerikut detail invoice dari *${company?.nama_toko ?? "DynoBoo"}*:\n\n📋 *No. Invoice:* ${invoice.invoice_no}\n📅 *Tanggal:* ${new Date(invoice.invoice_date).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})}\n🛍️ *Type:* ${invoice.invoice_type?.nama ?? "Invoice"}\n\n*Item:*\n${itemsText}\n\n💰 *Grand Total:* ${fmtRp(invoice.grand_total)}\n📌 *Status:* ${invoice.status_pembayaran}\n${invoice.dp_amount > 0 ? `✅ *DP Dibayar:* ${fmtRp(invoice.dp_amount)}\n💸 *Sisa:* ${fmtRp(invoice.sisa_tagihan)}\n` : ""}\nMohon segera lakukan pembayaran. Terima kasih! 🌸\n_${company?.nama_toko ?? "DynoBoo"} - ${company?.tagline ?? "Handmade Crochet Dolls"}_`;
-    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    const grandTotalVal = invoice.subtotal - invoice.discount;
+    const sisaVal = Math.max(0, grandTotalVal - totalPaid);
+    const isLunas = totalPaid >= grandTotalVal && grandTotalVal > 0;
+
+    // Format items tanpa emoji agar tidak korup karakter
+    const itemsText = (invoice.invoice_items ?? []).map(
+      it => `  * ${it.description}\n    ${it.qty} ${it.satuan} x ${fmtRp(it.harga_satuan)} = *${fmtRp(it.total_harga)}*`
+    ).join("\n");
+
+    const tgl = new Date(invoice.invoice_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
+    const msg = [
+      `Halo *${invoice.customer_name}*,`,
+      ``,
+      `Berikut detail invoice dari *${company?.nama_toko ?? "DynoBoo"}*:`,
+      `-----------------------------------`,
+      `[INVOICE] *${invoice.invoice_no}*`,
+      `Tanggal : ${tgl}`,
+      `Tipe    : ${invoice.invoice_type?.nama ?? "Invoice"}`,
+      `-----------------------------------`,
+      `*Item Pesanan:*`,
+      itemsText,
+      `-----------------------------------`,
+      ...(invoice.discount > 0 ? [`Subtotal    : ${fmtRp(invoice.subtotal)}`, `Diskon      : -${fmtRp(invoice.discount)}`] : []),
+      `*Grand Total : ${fmtRp(grandTotalVal)}*`,
+      ...(totalPaid > 0 ? [
+        `DP Dibayar  : ${fmtRp(totalPaid)}`,
+        isLunas
+          ? `*Status      : LUNAS [OK]*`
+          : `*Sisa Tagihan: ${fmtRp(sisaVal)}*`,
+      ] : [
+        `Status      : ${invoice.status_pembayaran}`,
+      ]),
+      `-----------------------------------`,
+      isLunas
+        ? `Terima kasih atas pembayaran Anda!\nPesanan Anda sedang kami proses.`
+        : `Mohon segera lakukan pembayaran ya Kak.\nTerima kasih!`,
+      ``,
+      `_${company?.nama_toko ?? "DynoBoo"}_`,
+      `_${company?.tagline ?? "Handmade Crochet Dolls & Beaded Accessories"}_`,
+    ].join("\n");
+
+    const url = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank");
   };
 
@@ -151,9 +193,29 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
         {/* Totals */}
         <div className="invoice-totals">
           <div className="invoice-totals-row"><span>Total</span><span>{fmtRp(invoice.subtotal)}</span></div>
-          <div className="invoice-totals-row"><span>Discount</span><span>{fmtRp(invoice.discount)}</span></div>
-          <div className="invoice-totals-row"><span>DP (Down Payment)</span><span>{fmtRp(invoice.dp_amount)}</span></div>
-          <div className="invoice-grand-total"><span>Grand Total</span><span>{fmtRp(invoice.grand_total)}</span></div>
+          {invoice.discount > 0 && (
+            <div className="invoice-totals-row"><span>Discount</span><span style={{ color: "#ef4444" }}>- {fmtRp(invoice.discount)}</span></div>
+          )}
+          <div className="invoice-grand-total" style={{ background: "#e8f4f6" }}>
+            <span>Grand Total</span>
+            <span>{fmtRp(invoice.subtotal - invoice.discount)}</span>
+          </div>
+          {totalPaid > 0 && (
+            <>
+              <div className="invoice-totals-row" style={{ marginTop: 8 }}>
+                <span style={{ color: "#10b981" }}>DP Dibayar ({payments.length}x)</span>
+                <span style={{ color: "#10b981" }}>- {fmtRp(totalPaid)}</span>
+              </div>
+              <div className="invoice-grand-total" style={{ background: totalPaid >= (invoice.subtotal - invoice.discount) ? "rgba(16,185,129,0.12)" : "#fff3cd", borderRadius: 8, marginTop: 4 }}>
+                <span style={{ color: totalPaid >= (invoice.subtotal - invoice.discount) ? "#10b981" : "#d97706" }}>
+                  {totalPaid >= (invoice.subtotal - invoice.discount) ? "✓ LUNAS" : "Sisa Tagihan"}
+                </span>
+                <span style={{ color: totalPaid >= (invoice.subtotal - invoice.discount) ? "#10b981" : "#d97706" }}>
+                  {fmtRp(Math.max(0, invoice.subtotal - invoice.discount - totalPaid))}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Catatan */}

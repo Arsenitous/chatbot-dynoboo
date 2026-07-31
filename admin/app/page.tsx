@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUser, Invoice, Item } from "@/lib/supabase";
 
 // ─── Import components ────────────────────────────────────────────────────────
-import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp } from "./components/ui";
+import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp, ToastProvider, useToast } from "./components/ui";
 import KatalogPage from "./components/KatalogPage";
 import StokPage from "./components/StokPage";
 import InvoiceListPage from "./components/InvoiceListPage";
@@ -20,7 +20,7 @@ type Page =
   | "dashboard"
   | "katalog" | "stok"
   | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
-  | "knowledge" | "workshops" | "pesanan" | "chatlogs"
+  | "knowledge" | "workshops" | "pesanan" | "riwayat-pesanan" | "chatlogs"
   | "company" | "access" | "ai-assistant" | "manual";
 
 // ─── Navigation Structure ──────────────────────────────────────────────────────
@@ -30,9 +30,15 @@ const NAV_GROUPS = [
     items: [{ id: "dashboard", label: "Dashboard", icon: <Icons.Dashboard /> }],
   },
   {
-    key: "PRODUK",
+    key: "PRODUK & WS",
     sub: [
-      { label: "Master", items: [{ id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> }] },
+      { 
+        label: "Master", 
+        items: [
+          { id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> },
+          { id: "workshops", label: "Workshops", icon: <Icons.Workshop /> }
+        ] 
+      },
       { label: "Stok", items: [{ id: "stok", label: "Stok & Kuota", icon: <Icons.BarChart /> }] },
     ],
   },
@@ -59,13 +65,13 @@ const NAV_GROUPS = [
         label: "Data Bot",
         items: [
           { id: "knowledge", label: "Knowledge Base", icon: <Icons.Brain /> },
-          { id: "workshops", label: "Workshops", icon: <Icons.Workshop /> },
         ],
       },
       {
         label: "Aktivitas",
         items: [
           { id: "pesanan", label: "Pesanan (Pre-order)", icon: <Icons.Orders /> },
+          { id: "riwayat-pesanan", label: "Riwayat Pesanan", icon: <Icons.CheckCircle /> },
           { id: "chatlogs", label: "Chat Logs", icon: <Icons.Chat /> },
         ],
       },
@@ -84,7 +90,7 @@ const NAV_GROUPS = [
 
 // ─── Group accent colours ───────────────────────────────────────────────────────
 const GROUP_META: Record<string, { color: string; bg: string; emoji: string }> = {
-  PRODUK:     { color: "#a78bfa", bg: "rgba(124,58,237,0.18)",  emoji: "📦" },
+  "PRODUK & WS": { color: "#a78bfa", bg: "rgba(124,58,237,0.18)",  emoji: "📦" },
   INVOICE:    { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🧾" },
   CHATBOT:    { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
   PENGATURAN: { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
@@ -188,12 +194,20 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
 
 
 function fmtDate(d: string) {
+  if (!d) return "—";
+  // Plain date strings like "2026-12-25" should be parsed as local time
+  // not as UTC midnight (which shifts the date in non-UTC timezones)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [year, month, day] = d.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  }
   return new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 }
 
 // ─── InvoiceTypes page ─────────────────────────────────────────────────────────
 type InvoiceTypeRow = { id: number; nama: string; prefix: string; deskripsi: string | null; is_active: boolean };
 function InvoiceTypesPage() {
+  const { showToast } = useToast();
   const [types, setTypes] = useState<InvoiceTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -205,12 +219,21 @@ function InvoiceTypesPage() {
   const openAdd = () => { setForm({ nama: "", prefix: "", deskripsi: "", is_active: true }); setAdding(true); setEditing(null); };
   const openEdit = (t: InvoiceTypeRow) => { setForm({ nama: t.nama, prefix: t.prefix, deskripsi: t.deskripsi ?? "", is_active: t.is_active }); setEditing(t); setAdding(false); };
   const save = async () => {
-    setSaving(true);
-    if (editing) await fetch(`/api/invoice-types/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    else await fetch("/api/invoice-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    if (editing) {
+      await fetch(`/api/invoice-types/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      showToast("Tipe invoice berhasil diperbarui!");
+    } else {
+      await fetch("/api/invoice-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      showToast("Tipe invoice berhasil ditambahkan!");
+    }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { if (!confirm("Hapus tipe invoice ini?")) return; await fetch(`/api/invoice-types/${id}`, { method: "DELETE" }); load(); };
+  const del = async (id: number) => { 
+    if (!confirm("Hapus tipe invoice ini?")) return; 
+    await fetch(`/api/invoice-types/${id}`, { method: "DELETE" }); 
+    showToast("Tipe invoice berhasil dihapus!");
+    load(); 
+  };
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -227,7 +250,7 @@ function InvoiceTypesPage() {
                   <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{t.nama}</td>
                   <td><code style={{ background: "rgba(56,189,248,0.12)", padding: "2px 8px", borderRadius: 4, color: "#38bdf8", fontSize: 12 }}>{t.prefix}</code></td>
                   <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{t.deskripsi ?? "—"}</td>
-                  <td><code style={{ fontSize: 11, color: "var(--text-secondary)" }}>DNB-{t.prefix}-2608-0001</code></td>
+                  <td><code style={{ fontSize: 11, color: "#38bdf8" }}>DNB-{t.prefix}-2608-0001</code></td>
                   <td><span className={`badge ${t.is_active ? "badge-active" : "badge-closed"}`}>{t.is_active ? "Aktif" : "Nonaktif"}</span></td>
                   <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(t)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(t.id)}><Icons.Trash /></button></div></td>
                 </tr>
@@ -487,6 +510,7 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown
 // ─── Knowledge, Workshops, Pesanan, ChatLogs, Access pages ────────────────────
 
 function KnowledgePage() {
+  const { showToast } = useToast();
   const [knowledges, setKnowledges] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<KnowledgeBase | null>(null);
@@ -512,11 +536,21 @@ function KnowledgePage() {
   const save = async () => {
     setSaving(true);
     const payload = { ...form, pilihan_jawaban: form.pilihan_jawaban.length ? form.pilihan_jawaban : null, edited_by: "superadmin" };
-    if (editing) await fetch(`/api/knowledge/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    else await fetch("/api/knowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (editing) {
+      await fetch(`/api/knowledge/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Knowledge Base berhasil diperbarui!");
+    } else {
+      await fetch("/api/knowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Knowledge Base berhasil ditambahkan!");
+    }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { if (!confirm("Hapus?")) return; await fetch(`/api/knowledge/${id}`, { method: "DELETE" }); load(); };
+  const del = async (id: number) => { 
+    if (!confirm("Hapus?")) return; 
+    await fetch(`/api/knowledge/${id}`, { method: "DELETE" }); 
+    showToast("Knowledge Base berhasil dihapus!");
+    load(); 
+  };
   const addChoice = () => setForm(f => ({ ...f, pilihan_jawaban: [...f.pilihan_jawaban, { opsi: "", jawaban: "" }] }));
   const updateChoice = (i: number, field: "opsi" | "jawaban", val: string) => setForm(f => ({ ...f, pilihan_jawaban: f.pilihan_jawaban.map((p, idx) => idx === i ? { ...p, [field]: val } : p) }));
   const removeChoice = (i: number) => setForm(f => ({ ...f, pilihan_jawaban: f.pilihan_jawaban.filter((_, idx) => idx !== i) }));
@@ -589,27 +623,38 @@ function KnowledgePage() {
 }
 
 function WorkshopsPage() {
+  const { showToast } = useToast();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Workshop | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { nama_workshop: "", tanggal: "", harga_normal: "", harga_promo: "", fasilitas: "", status: "ACTIVE" };
+  const emptyForm = { nama_workshop: "", tanggal: "", harga_normal: "", harga_promo: "", fasilitas: "", status: "ACTIVE", is_active: true };
   const [form, setForm] = useState(emptyForm);
   const STATUS_OPTS = [{ value: "ACTIVE", label: "✓ Aktif", color: "#34d399" }, { value: "UPCOMING", label: "◷ Upcoming", color: "#fbbf24" }, { value: "CLOSED", label: "✕ Tutup", color: "#94a3b8" }];
 
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/workshops"); setWorkshops(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
   const openAdd = () => { setForm(emptyForm); setAdding(true); setEditing(null); };
-  const openEdit = (w: Workshop) => { setForm({ nama_workshop: w.nama_workshop, tanggal: w.tanggal, harga_normal: w.harga_normal ?? "", harga_promo: w.harga_promo ?? "", fasilitas: w.fasilitas ?? "", status: w.status }); setEditing(w); setAdding(false); };
+  const openEdit = (w: Workshop) => { setForm({ nama_workshop: w.nama_workshop, tanggal: w.tanggal, harga_normal: w.harga_normal ?? "", harga_promo: w.harga_promo ?? "", fasilitas: w.fasilitas ?? "", status: w.status, is_active: w.is_active ?? true }); setEditing(w); setAdding(false); };
   const save = async () => {
     setSaving(true);
     const payload = { ...form, edited_by: "superadmin" };
-    if (editing) await fetch(`/api/workshops/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    else await fetch("/api/workshops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (editing) {
+      await fetch(`/api/workshops/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Workshop berhasil diperbarui!");
+    } else {
+      await fetch("/api/workshops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      showToast("Workshop berhasil ditambahkan!");
+    }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { if (!confirm("Hapus?")) return; await fetch(`/api/workshops/${id}`, { method: "DELETE" }); load(); };
+  const del = async (id: number) => { 
+    if (!confirm("Hapus?")) return; 
+    await fetch(`/api/workshops/${id}`, { method: "DELETE" }); 
+    showToast("Workshop berhasil dihapus!");
+    load(); 
+  };
 
   return (
     <div className="animate-in">
@@ -621,7 +666,7 @@ function WorkshopsPage() {
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status Event</th><th>Status Aktif</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
               <tbody>
                 {workshops.map(w => (
                   <tr key={w.id}>
@@ -632,6 +677,7 @@ function WorkshopsPage() {
                     <td>{w.harga_promo ? <span style={{ color: "#34d399", fontWeight: 600 }}>{w.harga_promo}</span> : "—"}</td>
                     <td style={{ color: "var(--text-muted)", fontSize: 12, maxWidth: 200 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{w.fasilitas ?? "—"}</span></td>
                     <td><span className={`badge ${w.status === "ACTIVE" ? "badge-active" : w.status === "UPCOMING" ? "badge-upcoming" : "badge-closed"}`}>{w.status}</span></td>
+                    <td><span className={`badge ${w.is_active ? "badge-active" : "badge-closed"}`}>{w.is_active ? "Aktif" : "Nonaktif"}</span></td>
                     <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(w)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(w.id)}><Icons.Trash /></button></div></td>
                   </tr>
                 ))}
@@ -651,7 +697,13 @@ function WorkshopsPage() {
               <Field label="Harga Promo"><input className="input" placeholder="Rp 90.000" value={form.harga_promo} onChange={e => setForm(f => ({ ...f, harga_promo: e.target.value }))} /></Field>
             </div>
             <Field label="Fasilitas"><textarea className="input" rows={3} placeholder="Alat rajut, yarn, pola, sertifikat..." value={form.fasilitas} onChange={e => setForm(f => ({ ...f, fasilitas: e.target.value }))} /></Field>
-            <Field label="Status"><CustomSelect value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} options={STATUS_OPTS} /></Field>
+            <Field label="Status Event"><CustomSelect value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} options={STATUS_OPTS} /></Field>
+            <Field label="Status Aktif (Tampil)">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div className={`toggle ${form.is_active ? "on" : ""}`} onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))} />
+                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{form.is_active ? "Aktif (Bisa diakses)" : "Nonaktif (Disembunyikan)"}</span>
+              </div>
+            </Field>
             <div style={{ display: "flex", gap: 8 }}><button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving}><Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}</button><button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button></div>
           </div>
         </Modal>
@@ -661,22 +713,39 @@ function WorkshopsPage() {
 }
 
 function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesanan: (p: Pesanan) => void }) {
+  const { showToast } = useToast();
   const [pesanan, setPesanan] = useState<Pesanan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [marking, setMarking] = useState<number | null>(null);
+  const [confirmPesanan, setConfirmPesanan] = useState<Pesanan | null>(null); // pesanan yang mau diselesaikan
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan"); setPesanan(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
+
+  const doMarkSelesai = async () => {
+    if (!confirmPesanan) return;
+    setMarking(confirmPesanan.id);
+    setConfirmPesanan(null);
+    const res = await fetch(`/api/pesanan/${confirmPesanan.id}/selesai`, { method: "PATCH" });
+    setMarking(null);
+    if (res.ok) {
+      showToast(`✅ Pesanan dari "${confirmPesanan.nama}" telah diselesaikan!`);
+      load();
+    } else {
+      showToast("Gagal menyelesaikan pesanan. Coba lagi.", "err");
+    }
+  };
 
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Pesanan (Pre-order)</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Dari chatbot Instagram — klik "Buat Invoice" untuk memproses</p></div>
+        <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Pesanan (Pre-order)</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Dari chatbot Instagram — klik "Buat Invoice" untuk memproses, atau "Selesai" jika sudah ditangani</p></div>
         <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th><th style={{ width: 130 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th><th style={{ width: 200 }}>Aksi</th></tr></thead>
               <tbody>
                 {pesanan.map(p => (
                   <tr key={p.id}>
@@ -686,10 +755,134 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
                     <td style={{ fontSize: 12, fontFamily: "monospace" }}>{p.no_hp}</td>
                     <td style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 160 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{p.alamat}</span></td>
                     <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(p.created_at)}</td>
-                    <td><button className="btn btn-primary btn-sm" onClick={() => onCreateInvoiceFromPesanan(p)}><Icons.Receipt /> Buat Invoice</button></td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn-primary btn-sm" onClick={() => onCreateInvoiceFromPesanan(p)}><Icons.Receipt /> Buat Invoice</button>
+                        <button
+                          className="btn btn-sm"
+                          style={{ background: "rgba(16,185,129,0.15)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}
+                          onClick={() => setConfirmPesanan(p)}
+                          disabled={marking === p.id}
+                          title="Tandai sebagai selesai"
+                        >
+                          {marking === p.id
+                            ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #10b981", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Proses...</>
+                            : <><Icons.Check /> Selesai</>
+                          }
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {pesanan.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada pesanan</td></tr>}
+                {pesanan.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Tidak ada pesanan aktif</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal Konfirmasi Selesai ── */}
+      {confirmPesanan && (
+        <Modal title="Tandai Pesanan Selesai" onClose={() => setConfirmPesanan(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Info pesanan */}
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 24 }}>📋</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{confirmPesanan.nama}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{confirmPesanan.produk} • {confirmPesanan.no_hp}</p>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", borderTop: "1px solid rgba(16,185,129,0.2)", paddingTop: 10 }}>
+                📍 {confirmPesanan.alamat}
+              </p>
+            </div>
+            {/* Pesan konfirmasi */}
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Pesanan ini akan dipindahkan ke <strong>Riwayat Pesanan</strong> dan tidak akan muncul lagi di daftar aktif.</span>
+            </div>
+            {/* Tombol aksi */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn btn-sm"
+                style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(16,185,129,0.2),rgba(5,150,105,0.15))", color: "#10b981", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 0", fontWeight: 700 }}
+                onClick={doMarkSelesai}
+              >
+                <Icons.Check /> Ya, Tandai Selesai
+              </button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setConfirmPesanan(null)}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── Riwayat Pesanan Page ───────────────────────────────────────────────────────
+function RiwayatPesananPage() {
+  const [riwayat, setRiwayat] = useState<Pesanan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan/riwayat"); setRiwayat(await r.json()); setLoading(false); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="animate-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Riwayat Pesanan</h2>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Pesanan yang sudah selesai ditangani</p>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+      </div>
+
+      <div className="card" style={{ overflow: "hidden" }}>
+        {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Nama</th>
+                  <th>Produk</th>
+                  <th>No HP</th>
+                  <th>Alamat</th>
+                  <th>Pesanan Masuk</th>
+                  <th>Diselesaikan</th>
+                  <th>Oleh</th>
+                </tr>
+              </thead>
+              <tbody>
+                {riwayat.map(p => (
+                  <tr key={p.id}>
+                    <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{p.id}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.nama}</td>
+                    <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{p.produk}</td>
+                    <td style={{ fontSize: 12, fontFamily: "monospace" }}>{p.no_hp}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 140 }}>
+                      <span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{p.alamat}</span>
+                    </td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(p.created_at)}</td>
+                    <td style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#10b981", fontWeight: 600 }}>
+                        <Icons.Check /> {p.selesai_at ? fmtDate(p.selesai_at) : "—"}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.diselesaikan_oleh ?? "—"}</td>
+                  </tr>
+                ))}
+                {riwayat.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                      Belum ada riwayat pesanan. Tandai pesanan aktif sebagai "Selesai" untuk melihatnya di sini.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -698,6 +891,7 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
     </div>
   );
 }
+
 
 function ChatLogsPage() {
   const [logs, setLogs] = useState<ChatLog[]>([]);
@@ -752,6 +946,7 @@ function ChatLogsPage() {
 }
 
 function AccessPage() {
+  const { showToast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -762,9 +957,15 @@ function AccessPage() {
   const addUser = async () => {
     setSaving(true);
     await fetch("/api/admin-users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    showToast("Admin User berhasil ditambahkan!");
     setSaving(false); setAdding(false); load();
   };
-  const del = async (id: number) => { if (!confirm("Hapus user ini?")) return; await fetch(`/api/admin-users/${id}`, { method: "DELETE" }); load(); };
+  const del = async (id: number) => { 
+    if (!confirm("Hapus user ini?")) return; 
+    await fetch(`/api/admin-users/${id}`, { method: "DELETE" }); 
+    showToast("Admin User berhasil dihapus!");
+    load(); 
+  };
   const ROLE_OPTS = [{ value: "admin", label: "👤 Admin" }, { value: "superadmin", label: "⭐ Superadmin" }];
   return (
     <div className="animate-in">
@@ -1196,7 +1397,7 @@ export default function AdminPage() {
     "invoice-list": "Daftar Invoice", "invoice-form": "Buat Invoice",
     "invoice-detail": "Detail Invoice", "invoice-types": "Tipe Invoice",
     knowledge: "Knowledge Base", workshops: "Workshops",
-    pesanan: "Pesanan", chatlogs: "Chat Logs",
+    pesanan: "Pesanan", "riwayat-pesanan": "Riwayat Pesanan", chatlogs: "Chat Logs",
     company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
     manual: "Buku Panduan",
   };
@@ -1213,6 +1414,7 @@ export default function AdminPage() {
       case "knowledge": return <KnowledgePage />;
       case "workshops": return <WorkshopsPage />;
       case "pesanan": return <PesananPage onCreateInvoiceFromPesanan={createInvoiceFromPesanan} />;
+      case "riwayat-pesanan": return <RiwayatPesananPage />;
       case "chatlogs": return <ChatLogsPage />;
       case "company": return <CompanyPage />;
       case "access": return <AccessPage />;
@@ -1222,6 +1424,7 @@ export default function AdminPage() {
   };
 
   return (
+    <ToastProvider>
     <div className={`admin-layout ${darkMode ? "" : "light"}`}>
       {/* Mobile Backdrop Overlay */}
       {mobileMenuOpen && (
@@ -1298,7 +1501,7 @@ export default function AdminPage() {
 
       {/* ── Floating AI Chat Bubble ───────────────────────────────────────── */}
       {aiOpen && (
-        <div className="ai-chat-panel" style={{
+        <div className="ai-chat-panel no-print" style={{
           position: "fixed", bottom: 88, right: 24, zIndex: 9998,
           width: 380, height: 560,
           background: "var(--bg-card)", border: "1px solid var(--border-2)",
@@ -1328,6 +1531,7 @@ export default function AdminPage() {
 
       {/* Bubble button */}
       <button
+        className="no-print"
         onClick={() => setAiOpen(o => !o)}
         style={{
           position: "fixed", bottom: 24, right: 24, zIndex: 9999,
@@ -1350,5 +1554,6 @@ export default function AdminPage() {
         }
       `}</style>
     </div>
+    </ToastProvider>
   );
 }

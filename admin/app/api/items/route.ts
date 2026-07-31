@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("items")
-    .insert({ ...body, created_by: user })
+    .insert(body)
     .select("*, item_type:item_types(*)")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });

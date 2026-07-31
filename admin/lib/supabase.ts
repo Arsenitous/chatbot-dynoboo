@@ -30,6 +30,7 @@ export type Workshop = {
   harga_normal: string | null;
   fasilitas: string | null;
   status: "ACTIVE" | "UPCOMING" | "CLOSED";
+  is_active: boolean;
   edited_by?: string;
   created_at: string;
 };
@@ -41,6 +42,9 @@ export type Pesanan = {
   alamat: string;
   no_hp: string;
   produk: string;
+  status: "AKTIF" | "SELESAI";
+  selesai_at: string | null;
+  diselesaikan_oleh: string | null;
   created_at: string;
 };
 
