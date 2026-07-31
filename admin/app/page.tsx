@@ -82,28 +82,32 @@ const NAV_GROUPS = [
   },
 ];
 
+// ─── Group accent colours ───────────────────────────────────────────────────────
+const GROUP_META: Record<string, { color: string; bg: string; emoji: string }> = {
+  PRODUK:     { color: "#a78bfa", bg: "rgba(124,58,237,0.18)",  emoji: "📦" },
+  INVOICE:    { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🧾" },
+  CHATBOT:    { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
+  PENGATURAN: { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
+};
+
 function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GROUPS[number]; currentPage: Page; onNavigate: (page: Page) => void }) {
   const isActive = (id: string) => currentPage === id || (currentPage === "invoice-detail" && id === "invoice-list");
 
-  // Check if any child in this group is active (to auto-keep open)
   const hasActiveChild =
     group.items?.some(i => isActive(i.id)) ||
     group.sub?.some(s => s.items.some(i => isActive(i.id)));
 
-  // Default open; stays open if a child is active
   const [open, setOpen] = useState(true);
+  const meta = GROUP_META[group.key];
 
-  // For MENU group — no toggle, always flat
+  // MENU group — no toggle
   if (group.key === "MENU") {
     return (
-      <div style={{ marginBottom: 4 }}>
+      <div style={{ marginBottom: 6 }}>
         {group.items?.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+          <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
             style={{ width: "100%", border: "none", background: "none" }}
-            onClick={() => onNavigate(item.id as Page)}
-          >
+            onClick={() => onNavigate(item.id as Page)}>
             {item.icon}<span>{item.label}</span>
           </button>
         ))}
@@ -112,71 +116,66 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
   }
 
   return (
-    <div style={{ marginBottom: 2 }}>
-      {/* ─── Clickable section header (PRODUK / INVOICE / CHATBOT / PENGATURAN) ─── */}
-      <div className="nav-section-divider" style={{ margin: "6px 10px 2px" }} />
+    <div style={{ marginBottom: 4 }}>
+      {/* ── Premium section header ── */}
       <button
-        style={{
-          width: "100%", border: "none", background: "none",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "7px 12px 5px",
-          cursor: "pointer",
-          borderRadius: 6,
-          transition: "background 0.15s",
-        }}
         onClick={() => setOpen(o => !o)}
-        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+        style={{
+          width: "100%", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 10px 7px 8px", borderRadius: 10, marginTop: 6,
+          background: open
+            ? (hasActiveChild ? `linear-gradient(90deg,${meta.bg},transparent)` : "var(--bg-card-2)")
+            : "transparent",
+          borderLeft: `3px solid ${open ? meta.color : "transparent"}`,
+          transition: "all 0.2s ease",
+          boxShadow: open && hasActiveChild ? `0 0 12px ${meta.color}28` : "none",
+        }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = "var(--bg-hover)"; }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = "transparent"; }}
       >
+        {/* Emoji icon badge */}
         <span style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: hasActiveChild && !open ? "#38bdf8" : "var(--text-muted)",
-        }}>
-          {group.key}
-        </span>
-        <svg
-          width="10" height="10" viewBox="0 0 24 24" fill="none"
-          stroke={hasActiveChild && !open ? "#38bdf8" : "var(--text-muted)"}
+          width: 22, height: 22, borderRadius: 6,
+          background: open ? meta.bg : "var(--bg-card-2)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 11, flexShrink: 0, transition: "all 0.2s",
+          boxShadow: open ? `0 0 8px ${meta.color}40` : "none",
+        }}>{meta.emoji}</span>
+
+        <span style={{
+          flex: 1, fontSize: 10, fontWeight: 800, letterSpacing: "0.1em",
+          textTransform: "uppercase", textAlign: "left",
+          color: open ? meta.color : (hasActiveChild ? meta.color : "var(--text-muted)"),
+          transition: "color 0.2s",
+        }}>{group.key}</span>
+
+        {/* Chevron */}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke={open ? meta.color : "var(--text-subtle)"}
           strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-          style={{ transition: "transform 0.22s ease", transform: open ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}
-        >
+          style={{ transition: "transform 0.22s ease", transform: open ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
 
-      {/* ─── Collapsible content ─── */}
-      <div className={`nav-group-content ${open ? "" : "collapsed"}`}>
-        {/* Flat items (PENGATURAN) */}
+      {/* ── Collapsible content ── */}
+      <div className={`nav-group-content ${open ? "" : "collapsed"}`}
+        style={{ paddingLeft: 4 }}>
         {group.items?.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+          <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
             style={{ width: "100%", border: "none", background: "none" }}
-            onClick={() => onNavigate(item.id as Page)}
-          >
+            onClick={() => onNavigate(item.id as Page)}>
             {item.icon}<span>{item.label}</span>
           </button>
         ))}
-
-        {/* Grouped sub-sections (PRODUK, INVOICE, CHATBOT) — sub-label is static */}
         {group.sub?.map((sub, si) => (
           <div key={si}>
-            {/* Static sub-label — NOT clickable */}
-            <p style={{
-              fontSize: 9, fontWeight: 700, color: "var(--text-subtle)",
-              paddingLeft: 12, marginTop: 6, marginBottom: 2,
-              letterSpacing: "0.08em", textTransform: "uppercase",
-            }}>— {sub.label}</p>
-
-            {/* Items */}
+            <p style={{ fontSize: 9, fontWeight: 700, color: "var(--text-subtle)", paddingLeft: 10, marginTop: 8, marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>— {sub.label}</p>
             {sub.items.map((item) => (
-              <button
-                key={item.id}
-                className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-                style={{ width: "100%", border: "none", background: "none", paddingLeft: 18 }}
-                onClick={() => onNavigate(item.id as Page)}
-              >
+              <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+                style={{ width: "100%", border: "none", background: "none", paddingLeft: 16 }}
+                onClick={() => onNavigate(item.id as Page)}>
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
@@ -855,6 +854,273 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// ─── Notification types ─────────────────────────────────────────────────────────
+type Notif = { id: string; type: "pesanan" | "stok" | "invoice" | "info"; title: string; body: string; time: Date; read: boolean; };
+
+const NOTIF_ICONS: Record<Notif["type"], string> = {
+  pesanan: "🛒", stok: "📦", invoice: "🧾", info: "ℹ️",
+};
+const NOTIF_COLORS: Record<Notif["type"], string> = {
+  pesanan: "#f59e0b", stok: "#f87171", invoice: "#38bdf8", info: "#a78bfa",
+};
+
+type NotifBellProps = {
+  notifs: Notif[]; setNotifs: React.Dispatch<React.SetStateAction<Notif[]>>;
+  notifOpen: boolean; setNotifOpen: (v: boolean) => void;
+  onNavigate: (page: Page) => void;
+};
+
+function NotifBell({ notifs, setNotifs, notifOpen, setNotifOpen, onNavigate }: NotifBellProps) {
+  const unread = notifs.filter(n => !n.read).length;
+
+  // Auto-fetch notifications on mount and every 60s
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      const newNotifs: Notif[] = [];
+      try {
+        // Check new pesanan (chatbot pre-orders)
+        const pr = await fetch("/api/pesanan");
+        if (pr.ok) {
+          const pesanan = await pr.json();
+          if (pesanan.length > 0) {
+            newNotifs.push({
+              id: "pesanan-new",
+              type: "pesanan",
+              title: `${pesanan.length} Pesanan Pre-order Masuk`,
+              body: `Terbaru: ${pesanan[0]?.nama ?? "Customer"} — ${pesanan[0]?.produk ?? ""}`,
+              time: new Date(pesanan[0]?.created_at ?? Date.now()),
+              read: false,
+            });
+          }
+        }
+        // Check low stock
+        const sr = await fetch("/api/stocks");
+        if (sr.ok) {
+          const stocks = await sr.json();
+          const low = stocks.filter((s: { qty_available: number; item?: { is_active: boolean } }) =>
+            s.qty_available <= 3 && s.item?.is_active);
+          if (low.length > 0) {
+            newNotifs.push({
+              id: "stok-low",
+              type: "stok",
+              title: `${low.length} Item Stok Kritis (≤ 3)`,
+              body: low.slice(0, 3).map((s: { item?: { nama: string }; qty_available: number }) =>
+                `${s.item?.nama ?? "Item"}: ${s.qty_available} tersisa`).join(" • "),
+              time: new Date(),
+              read: false,
+            });
+          }
+        }
+        // Check unpaid invoices
+        const ir = await fetch("/api/invoices?status=UNPAID");
+        if (ir.ok) {
+          const inv = await ir.json();
+          if (inv.length > 0) {
+            newNotifs.push({
+              id: "invoice-unpaid",
+              type: "invoice",
+              title: `${inv.length} Invoice Belum Dibayar`,
+              body: `Total tagihan pending perlu tindak lanjut segera.`,
+              time: new Date(),
+              read: false,
+            });
+          }
+        }
+      } catch { /* silent */ }
+      if (newNotifs.length > 0) {
+        setNotifs(prev => {
+          // Merge: keep old reads, add new
+          const ids = prev.map(n => n.id);
+          const merged = [...prev.filter(n => n.read)];
+          for (const n of newNotifs) {
+            const existing = prev.find(p => p.id === n.id);
+            merged.push(existing && existing.read ? { ...n, read: true } : n);
+          }
+          return merged;
+        });
+      }
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 60_000);
+    return () => clearInterval(interval);
+  }, [setNotifs]);
+
+  const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  const markRead = (id: string) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const clearAll = () => setNotifs([]);
+
+  const handleNotifClick = (n: Notif) => {
+    markRead(n.id);
+    if (n.type === "pesanan") onNavigate("pesanan");
+    else if (n.type === "stok") onNavigate("stok");
+    else if (n.type === "invoice") onNavigate("invoice-list");
+  };
+
+  const timeAgo = (d: Date) => {
+    const diff = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (diff < 1) return "Baru saja";
+    if (diff < 60) return `${diff} mnt lalu`;
+    return `${Math.floor(diff / 60)} jam lalu`;
+  };
+
+  return (
+    <>
+      {/* Bell button */}
+      <div style={{ position: "relative" }}>
+        <button
+          className="theme-btn"
+          onClick={() => setNotifOpen(!notifOpen)}
+          title="Notifikasi"
+          style={{ position: "relative" }}
+        >
+          {/* Bell icon */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          {unread > 0 && (
+            <span style={{
+              position: "absolute", top: 4, right: 4,
+              width: 8, height: 8, borderRadius: "50%",
+              background: "#f87171",
+              border: "1.5px solid var(--bg-card)",
+              animation: "pulse-ring 2s infinite",
+            }} />
+          )}
+        </button>
+        {unread > 0 && (
+          <span style={{
+            position: "absolute", top: -2, right: -2,
+            minWidth: 16, height: 16, borderRadius: 8,
+            background: "linear-gradient(135deg,#ef4444,#f87171)",
+            color: "white", fontSize: 9, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "0 4px", pointerEvents: "none",
+            border: "1.5px solid var(--bg-card)",
+          }}>{unread > 9 ? "9+" : unread}</span>
+        )}
+      </div>
+
+      {/* Slide-in notification panel */}
+      <div style={{
+        position: "fixed", top: 56, right: 0, bottom: 0, zIndex: 500,
+        width: notifOpen ? 340 : 0,
+        overflow: "hidden",
+        transition: "width 0.28s cubic-bezier(0.4,0,0.2,1)",
+        pointerEvents: notifOpen ? "auto" : "none",
+      }}>
+        <div style={{
+          width: 340, height: "100%",
+          background: "var(--bg-sidebar)",
+          borderLeft: "1px solid var(--border)",
+          display: "flex", flexDirection: "column",
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.3)",
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "16px 18px", borderBottom: "1px solid var(--border)",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            background: "linear-gradient(135deg,rgba(56,189,248,0.08),rgba(6,182,212,0.04))",
+            flexShrink: 0,
+          }}>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                🔔 Notifikasi
+              </p>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                {unread > 0 ? `${unread} belum dibaca` : "Semua sudah dibaca"}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {unread > 0 && (
+                <button className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} onClick={markAllRead}>
+                  ✓ Baca Semua
+                </button>
+              )}
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setNotifOpen(false)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Notifications list */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+            {notifs.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)" }}>
+                <p style={{ fontSize: 32, marginBottom: 12 }}>🔕</p>
+                <p style={{ fontSize: 13, fontWeight: 600 }}>Tidak ada notifikasi</p>
+                <p style={{ fontSize: 12, marginTop: 4, color: "var(--text-subtle)" }}>
+                  Notifikasi pesanan, stok, dan invoice akan muncul di sini
+                </p>
+              </div>
+            ) : (
+              notifs.map(n => (
+                <div
+                  key={n.id}
+                  onClick={() => handleNotifClick(n)}
+                  style={{
+                    padding: "12px 18px", cursor: "pointer",
+                    borderBottom: "1px solid var(--border)",
+                    background: n.read ? "transparent" : `${NOTIF_COLORS[n.type]}08`,
+                    transition: "background 0.15s",
+                    display: "flex", gap: 12, alignItems: "flex-start",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = n.read ? "transparent" : `${NOTIF_COLORS[n.type]}08`)}
+                >
+                  {/* Icon badge */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    background: `${NOTIF_COLORS[n.type]}18`,
+                    border: `1px solid ${NOTIF_COLORS[n.type]}30`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 16,
+                  }}>{NOTIF_ICONS[n.type]}</div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                      <p style={{
+                        fontSize: 13, fontWeight: n.read ? 500 : 700,
+                        color: "var(--text-primary)", lineHeight: 1.3,
+                      }}>{n.title}</p>
+                      {!n.read && (
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: NOTIF_COLORS[n.type], flexShrink: 0, marginTop: 4 }} />
+                      )}
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.5 }}>{n.body}</p>
+                    <p style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 6 }}>{timeAgo(n.time)}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          {notifs.length > 0 && (
+            <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", flexShrink: 0 }}>
+              <button className="btn btn-secondary btn-sm" style={{ width: "100%", justifyContent: "center", fontSize: 12 }} onClick={clearAll}>
+                🗑 Hapus Semua Notifikasi
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Thin transparent backdrop to close on outside click (non-blocking) */}
+      {notifOpen && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 499 }}
+          onClick={() => setNotifOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter();
@@ -866,6 +1132,8 @@ export default function AdminPage() {
   const [prefillPesanan, setPrefillPesanan] = useState<Pesanan | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
 
   useEffect(() => {
     const check = async () => {
@@ -1000,9 +1268,15 @@ export default function AdminPage() {
             <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{PAGE_TITLES[currentPage]}</h2>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Theme toggle */}
             <button className="theme-btn" onClick={() => setDarkMode(d => !d)} title="Toggle theme">
               {darkMode ? <Icons.Sun /> : <Icons.Moon />}
             </button>
+
+            {/* Notification Bell */}
+            <NotifBell notifs={notifs} setNotifs={setNotifs} notifOpen={notifOpen} setNotifOpen={setNotifOpen} onNavigate={handleNavigate} />
+
+            <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 2px" }} />
             <div style={{ padding: "4px 12px", borderRadius: 6, background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.25)", fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>superadmin</div>
           </div>
         </div>
