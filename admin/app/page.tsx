@@ -83,81 +83,106 @@ const NAV_GROUPS = [
 ];
 
 function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GROUPS[number]; currentPage: Page; onNavigate: (page: Page) => void }) {
-  // Each sub-group has its own open/closed state, default open
-  const [openSubs, setOpenSubs] = useState<Record<number, boolean>>(() => {
-    const init: Record<number, boolean> = {};
-    (group.sub ?? []).forEach((_, i) => { init[i] = true; });
-    return init;
-  });
-
   const isActive = (id: string) => currentPage === id || (currentPage === "invoice-detail" && id === "invoice-list");
 
-  const toggleSub = (idx: number) => setOpenSubs(prev => ({ ...prev, [idx]: !prev[idx] }));
+  // Check if any child in this group is active (to auto-keep open)
+  const hasActiveChild =
+    group.items?.some(i => isActive(i.id)) ||
+    group.sub?.some(s => s.items.some(i => isActive(i.id)));
+
+  // Default open; stays open if a child is active
+  const [open, setOpen] = useState(true);
+
+  // For MENU group — no toggle, always flat
+  if (group.key === "MENU") {
+    return (
+      <div style={{ marginBottom: 4 }}>
+        {group.items?.map((item) => (
+          <button
+            key={item.id}
+            className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+            style={{ width: "100%", border: "none", background: "none" }}
+            onClick={() => onNavigate(item.id as Page)}
+          >
+            {item.icon}<span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ marginBottom: 8 }}>
-      {/* Section label */}
-      {group.key !== "MENU" && (
-        <p className="nav-section-label">{group.key}</p>
-      )}
-
-      {/* Flat items (MENU, PENGATURAN) */}
-      {group.items?.map((item) => (
-        <button
-          key={item.id}
-          className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-          style={{ width: "100%", border: "none", background: "none" }}
-          onClick={() => onNavigate(item.id as Page)}
+    <div style={{ marginBottom: 2 }}>
+      {/* ─── Clickable section header (PRODUK / INVOICE / CHATBOT / PENGATURAN) ─── */}
+      <div className="nav-section-divider" style={{ margin: "6px 10px 2px" }} />
+      <button
+        style={{
+          width: "100%", border: "none", background: "none",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "7px 12px 5px",
+          cursor: "pointer",
+          borderRadius: 6,
+          transition: "background 0.15s",
+        }}
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+      >
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: hasActiveChild && !open ? "#38bdf8" : "var(--text-muted)",
+        }}>
+          {group.key}
+        </span>
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke={hasActiveChild && !open ? "#38bdf8" : "var(--text-muted)"}
+          strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transition: "transform 0.22s ease", transform: open ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}
         >
-          {item.icon}<span>{item.label}</span>
-        </button>
-      ))}
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
 
-      {/* Grouped sub-sections (PRODUK, INVOICE, CHATBOT) */}
-      {group.sub?.map((sub, si) => {
-        const isOpen = openSubs[si] !== false;
-        const hasActiveChild = sub.items.some(i => isActive(i.id));
+      {/* ─── Collapsible content ─── */}
+      <div className={`nav-group-content ${open ? "" : "collapsed"}`}>
+        {/* Flat items (PENGATURAN) */}
+        {group.items?.map((item) => (
+          <button
+            key={item.id}
+            className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+            style={{ width: "100%", border: "none", background: "none" }}
+            onClick={() => onNavigate(item.id as Page)}
+          >
+            {item.icon}<span>{item.label}</span>
+          </button>
+        ))}
 
-        return (
+        {/* Grouped sub-sections (PRODUK, INVOICE, CHATBOT) — sub-label is static */}
+        {group.sub?.map((sub, si) => (
           <div key={si}>
-            {/* Sub-group header / toggle */}
-            <button
-              className="nav-item"
-              style={{
-                width: "100%", border: "none", background: "none",
-                justifyContent: "space-between",
-                color: hasActiveChild ? "#38bdf8" : "var(--text-subtle)",
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.07em",
-                textTransform: "uppercase", padding: "6px 12px",
-              }}
-              onClick={() => toggleSub(si)}
-            >
-              <span>— {sub.label}</span>
-              <svg
-                width="10" height="10" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                style={{ transition: "transform 0.2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", flexShrink: 0 }}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+            {/* Static sub-label — NOT clickable */}
+            <p style={{
+              fontSize: 9, fontWeight: 700, color: "var(--text-subtle)",
+              paddingLeft: 12, marginTop: 6, marginBottom: 2,
+              letterSpacing: "0.08em", textTransform: "uppercase",
+            }}>— {sub.label}</p>
 
-            {/* Sub-group items */}
-            <div className={`nav-group-content ${isOpen ? "" : "collapsed"}`}>
-              {sub.items.map((item) => (
-                <button
-                  key={item.id}
-                  className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-                  style={{ width: "100%", border: "none", background: "none", paddingLeft: 20 }}
-                  onClick={() => onNavigate(item.id as Page)}
-                >
-                  {item.icon}<span>{item.label}</span>
-                </button>
-              ))}
-            </div>
+            {/* Items */}
+            {sub.items.map((item) => (
+              <button
+                key={item.id}
+                className={`nav-item ${isActive(item.id) ? "active" : ""}`}
+                style={{ width: "100%", border: "none", background: "none", paddingLeft: 18 }}
+                onClick={() => onNavigate(item.id as Page)}
+              >
+                {item.icon}<span>{item.label}</span>
+              </button>
+            ))}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
