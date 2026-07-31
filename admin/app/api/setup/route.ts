@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth";
 
@@ -41,3 +42,4 @@ export async function GET() {
     message: `✅ SuperAdmin "${username}" berhasil dibuat di database! Sekarang login bisa menggunakan data dari Supabase.`,
   });
 }
+

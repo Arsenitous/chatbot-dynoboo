@@ -1,5 +1,8 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const { data, error } = await supabase.from("invoice_types").select("*").order("id");
@@ -13,3 +16,4 @@ export async function POST(request: NextRequest) {
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json(data, { status: 201 });
 }
+

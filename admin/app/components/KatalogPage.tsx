@@ -59,6 +59,23 @@ export default function KatalogPage() {
     setSaving(false); setAdding(false); setEditing(null); load();
   };
 
+  const handleAddType = async () => {
+    const nama = window.prompt("Masukkan nama Tipe Item baru (contoh: Workshop, Kerajinan Tangan):");
+    if (!nama) return;
+    const icon = window.prompt("Masukkan emoji untuk icon (contoh: 🎨, 🧶):", "📦") || "📦";
+    const r = await fetch("/api/item-types", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nama, icon })
+    });
+    if (r.ok) {
+      const newType = await r.json();
+      setItemTypes(prev => [...prev, newType]);
+      setForm(f => ({ ...f, item_type_id: String(newType.id) }));
+    } else {
+      alert("Gagal menambahkan tipe item.");
+    }
+  };
+
   const del = async (id: number) => {
     if (!confirm("Hapus item ini? Ini akan menghapus stok terkait juga.")) return;
     await fetch(`/api/items/${id}`, { method: "DELETE" }); load();
@@ -143,7 +160,16 @@ export default function KatalogPage() {
       {(adding || !!editing) && (
         <Modal title={editing ? `Edit: ${editing.nama}` : "Tambah Item Katalog"} onClose={() => { setAdding(false); setEditing(null); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Tipe Item"><CustomSelect value={form.item_type_id} onChange={v => setForm({ ...form, item_type_id: v })} options={[{ value: "", label: "— Pilih Tipe —" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))]} /></Field>
+            <Field label="Tipe Item">
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <CustomSelect value={form.item_type_id} onChange={v => setForm({ ...form, item_type_id: v })} options={[{ value: "", label: "— Pilih Tipe —" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))]} />
+                </div>
+                <button className="btn btn-secondary" style={{ padding: "0 14px" }} onClick={handleAddType} title="Tambah Tipe Baru">
+                  <Icons.Plus />
+                </button>
+              </div>
+            </Field>
             <Field label="Nama Item" required><input className="input" placeholder="Workshop Animal Pot, Boneka Beruang..." value={form.nama} onChange={e => setForm({ ...form, nama: e.target.value })} /></Field>
             <Field label="Deskripsi"><textarea className="input" rows={2} placeholder="Deskripsi singkat produk..." value={form.deskripsi} onChange={e => setForm({ ...form, deskripsi: e.target.value })} /></Field>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -152,7 +178,6 @@ export default function KatalogPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Satuan"><CustomSelect value={form.satuan} onChange={v => setForm({ ...form, satuan: v })} options={satOptions} /></Field>
-              <Field label="Harga Promo"><input className="input" type="number" placeholder="90000" value={form.harga_promo} onChange={e => setForm({ ...form, harga_promo: e.target.value })} /></Field>
             </div>
             <Field label="Status">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

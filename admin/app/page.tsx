@@ -9,7 +9,6 @@ import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUs
 import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp } from "./components/ui";
 import KatalogPage from "./components/KatalogPage";
 import StokPage from "./components/StokPage";
-import TipeItemPage from "./components/TipeItemPage";
 import InvoiceListPage from "./components/InvoiceListPage";
 import InvoiceFormPage from "./components/InvoiceFormPage";
 import InvoiceDetailPage from "./components/InvoiceDetailPage";
@@ -19,7 +18,7 @@ import AiAssistantPage from "./components/AiAssistantPage";
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Page =
   | "dashboard"
-  | "katalog" | "stok" | "tipe-item"
+  | "katalog" | "stok"
   | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
   | "knowledge" | "workshops" | "pesanan" | "chatlogs"
   | "company" | "access" | "ai-assistant" | "manual";
@@ -33,10 +32,7 @@ const NAV_GROUPS = [
   {
     key: "PRODUK",
     sub: [
-      { label: "Master", items: [
-        { id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> },
-        { id: "tipe-item", label: "Tipe Item", icon: <Icons.Layers /> },
-      ] },
+      { label: "Master", items: [{ id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> }] },
       { label: "Stok", items: [{ id: "stok", label: "Stok & Kuota", icon: <Icons.BarChart /> }] },
     ],
   },
@@ -933,14 +929,16 @@ function NotifBell({ notifs, setNotifs, notifOpen, setNotifOpen, onNavigate }: N
       } catch { /* silent */ }
       if (newNotifs.length > 0) {
         setNotifs(prev => {
-          // Build a map from existing notifs (id → notif)
-          const map = new Map<string, Notif>(prev.map(n => [n.id, n]));
+          const merged = [...prev];
           for (const n of newNotifs) {
-            // Preserve read state if already existed
-            const existing = map.get(n.id);
-            map.set(n.id, { ...n, read: existing?.read ?? false });
+            const idx = merged.findIndex(p => p.id === n.id);
+            if (idx >= 0) {
+              merged[idx] = { ...n, read: merged[idx].read };
+            } else {
+              merged.push(n);
+            }
           }
-          return Array.from(map.values());
+          return merged;
         });
       }
     };
@@ -1193,7 +1191,7 @@ export default function AdminPage() {
     knowledge: "Knowledge Base", workshops: "Workshops",
     pesanan: "Pesanan", chatlogs: "Chat Logs",
     company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
-    manual: "Buku Panduan", "tipe-item": "Tipe Item Produk",
+    manual: "Buku Panduan",
   };
 
   const renderPage = () => {
@@ -1201,7 +1199,6 @@ export default function AdminPage() {
       case "dashboard": return <DashboardPage onNavigate={handleNavigate} />;
       case "katalog": return <KatalogPage />;
       case "stok": return <StokPage />;
-      case "tipe-item": return <TipeItemPage />;
       case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} />;
       case "invoice-form": return <InvoiceFormPage onSuccess={handleInvoiceCreated} onCancel={() => setCurrentPage("invoice-list")} prefillPesanan={prefillPesanan} />;
       case "invoice-detail": return currentInvoiceId ? <InvoiceDetailPage invoiceId={currentInvoiceId} onBack={() => setCurrentPage("invoice-list")} /> : null;

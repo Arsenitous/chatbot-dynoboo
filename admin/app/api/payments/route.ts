@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
@@ -48,3 +49,4 @@ export async function POST(request: NextRequest) {
 
   return Response.json({ payment, new_status: newStatus }, { status: 201 });
 }
+
