@@ -14,12 +14,14 @@ import InvoiceFormPage from "./components/InvoiceFormPage";
 import InvoiceDetailPage from "./components/InvoiceDetailPage";
 import CompanyPage from "./components/CompanyPage";
 import AiAssistantPage from "./components/AiAssistantPage";
+import CustomerPage from "./components/CustomerPage";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Page =
   | "dashboard"
   | "katalog" | "stok"
   | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
+  | "customers"
   | "knowledge" | "workshops" | "pesanan" | "riwayat-pesanan" | "chatlogs"
   | "company" | "access" | "ai-assistant" | "manual";
 
@@ -59,6 +61,12 @@ const NAV_GROUPS = [
     ],
   },
   {
+    key: "CUSTOMER",
+    items: [
+      { id: "customers", label: "Customer Logbook", icon: <Icons.Users /> },
+    ],
+  },
+  {
     key: "CHATBOT",
     sub: [
       {
@@ -90,10 +98,12 @@ const NAV_GROUPS = [
 
 // ─── Group accent colours ───────────────────────────────────────────────────────
 const GROUP_META: Record<string, { color: string; bg: string; emoji: string }> = {
-  "PRODUK & WS": { color: "#a78bfa", bg: "rgba(124,58,237,0.18)",  emoji: "📦" },
-  INVOICE:    { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🧾" },
-  CHATBOT:    { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
-  PENGATURAN: { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
+  MENU:          { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🏠" },
+  "PRODUK & WS": { color: "#a78bfa", bg: "rgba(167,139,250,0.18)", emoji: "📦" },
+  INVOICE:       { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🧾" },
+  CUSTOMER:      { color: "#fb7185", bg: "rgba(251,113,133,0.18)", emoji: "👥" },
+  CHATBOT:       { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
+  PENGATURAN:    { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
 };
 
 function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GROUPS[number]; currentPage: Page; onNavigate: (page: Page) => void }) {
@@ -104,19 +114,42 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
     group.sub?.some(s => s.items.some(i => isActive(i.id)));
 
   const [open, setOpen] = useState(true);
-  const meta = GROUP_META[group.key];
+  const meta = GROUP_META[group.key] || { color: "#38bdf8", bg: "rgba(56,189,248,0.18)", emoji: "📌" };
+
+  const getItemStyle = (active: boolean) => {
+    if (active) {
+      return {
+        width: "100%",
+        border: `1px solid ${meta.color}40`,
+        background: meta.bg,
+        color: meta.color,
+        fontWeight: 600,
+        boxShadow: `0 0 12px ${meta.color}20`,
+        transition: "all 0.15s ease",
+      };
+    }
+    return {
+      width: "100%",
+      border: "1px solid transparent",
+      background: "none",
+      transition: "all 0.15s ease",
+    };
+  };
 
   // MENU group — no toggle
   if (group.key === "MENU") {
     return (
       <div style={{ marginBottom: 6 }}>
-        {group.items?.map((item) => (
-          <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-            style={{ width: "100%", border: "none", background: "none" }}
-            onClick={() => onNavigate(item.id as Page)}>
-            {item.icon}<span>{item.label}</span>
-          </button>
-        ))}
+        {group.items?.map((item) => {
+          const active = isActive(item.id);
+          return (
+            <button key={item.id} className={`nav-item ${active ? "active" : ""}`}
+              style={getItemStyle(active)}
+              onClick={() => onNavigate(item.id as Page)}>
+              {item.icon}<span>{item.label}</span>
+            </button>
+          );
+        })}
       </div>
     );
   }
@@ -127,38 +160,35 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          width: "100%", border: "none", cursor: "pointer",
+          width: "100%", border: "none", outline: "none", cursor: "pointer",
           display: "flex", alignItems: "center", gap: 8,
           padding: "7px 10px 7px 8px", borderRadius: 10, marginTop: 6,
-          background: open
-            ? (hasActiveChild ? `linear-gradient(90deg,${meta.bg},transparent)` : "var(--bg-card-2)")
-            : "transparent",
-          borderLeft: `3px solid ${open ? meta.color : "transparent"}`,
+          background: hasActiveChild ? "var(--bg-card-2)" : "transparent",
+          borderLeft: `3px solid ${meta.color}`,
           transition: "all 0.2s ease",
-          boxShadow: open && hasActiveChild ? `0 0 12px ${meta.color}28` : "none",
         }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = "var(--bg-hover)"; }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = hasActiveChild ? "var(--bg-card-2)" : "transparent"; }}
       >
         {/* Emoji icon badge */}
         <span style={{
           width: 22, height: 22, borderRadius: 6,
-          background: open ? meta.bg : "var(--bg-card-2)",
+          background: meta.bg,
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 11, flexShrink: 0, transition: "all 0.2s",
-          boxShadow: open ? `0 0 8px ${meta.color}40` : "none",
+          boxShadow: `0 0 8px ${meta.color}40`,
         }}>{meta.emoji}</span>
 
         <span style={{
           flex: 1, fontSize: 10, fontWeight: 800, letterSpacing: "0.1em",
           textTransform: "uppercase", textAlign: "left",
-          color: open ? meta.color : (hasActiveChild ? meta.color : "var(--text-muted)"),
+          color: meta.color,
           transition: "color 0.2s",
         }}>{group.key}</span>
 
         {/* Chevron */}
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-          stroke={open ? meta.color : "var(--text-subtle)"}
+          stroke={meta.color}
           strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
           style={{ transition: "transform 0.22s ease", transform: open ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}>
           <polyline points="6 9 12 15 18 9" />
@@ -168,23 +198,29 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
       {/* ── Collapsible content ── */}
       <div className={`nav-group-content ${open ? "" : "collapsed"}`}
         style={{ paddingLeft: 4 }}>
-        {group.items?.map((item) => (
-          <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-            style={{ width: "100%", border: "none", background: "none" }}
-            onClick={() => onNavigate(item.id as Page)}>
-            {item.icon}<span>{item.label}</span>
-          </button>
-        ))}
+        {group.items?.map((item) => {
+          const active = isActive(item.id);
+          return (
+            <button key={item.id} className={`nav-item ${active ? "active" : ""}`}
+              style={getItemStyle(active)}
+              onClick={() => onNavigate(item.id as Page)}>
+              {item.icon}<span>{item.label}</span>
+            </button>
+          );
+        })}
         {group.sub?.map((sub, si) => (
           <div key={si}>
             <p style={{ fontSize: 9, fontWeight: 700, color: "var(--text-subtle)", paddingLeft: 10, marginTop: 8, marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>— {sub.label}</p>
-            {sub.items.map((item) => (
-              <button key={item.id} className={`nav-item ${isActive(item.id) ? "active" : ""}`}
-                style={{ width: "100%", border: "none", background: "none", paddingLeft: 16 }}
-                onClick={() => onNavigate(item.id as Page)}>
-                {item.icon}<span>{item.label}</span>
-              </button>
-            ))}
+            {sub.items.map((item) => {
+              const active = isActive(item.id);
+              return (
+                <button key={item.id} className={`nav-item ${active ? "active" : ""}`}
+                  style={{ ...getItemStyle(active), paddingLeft: 16 }}
+                  onClick={() => onNavigate(item.id as Page)}>
+                  {item.icon}<span>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -1396,6 +1432,7 @@ export default function AdminPage() {
     dashboard: "Dashboard", katalog: "Katalog Produk", stok: "Stok & Kuota",
     "invoice-list": "Daftar Invoice", "invoice-form": "Buat Invoice",
     "invoice-detail": "Detail Invoice", "invoice-types": "Tipe Invoice",
+    customers: "Customer Logbook",
     knowledge: "Knowledge Base", workshops: "Workshops",
     pesanan: "Pesanan", "riwayat-pesanan": "Riwayat Pesanan", chatlogs: "Chat Logs",
     company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
@@ -1416,6 +1453,7 @@ export default function AdminPage() {
       case "pesanan": return <PesananPage onCreateInvoiceFromPesanan={createInvoiceFromPesanan} />;
       case "riwayat-pesanan": return <RiwayatPesananPage />;
       case "chatlogs": return <ChatLogsPage />;
+      case "customers": return <CustomerPage />;
       case "company": return <CompanyPage />;
       case "access": return <AccessPage />;
       case "ai-assistant": return <AiAssistantPage />;

@@ -64,7 +64,21 @@ export type AdminUser = {
   created_at: string;
 };
 
+// ─── Customer Logbook Types ───────────────────────────────────────────────────
+
+export type Customer = {
+  id: number;
+  nama: string;
+  no_hp: string | null;
+  email: string | null;
+  alamat: string | null;
+  catatan: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
 // ─── POS / Invoice Types ──────────────────────────────────────────────────────
+
 
 export type RekeningInfo = {
   bank: string;

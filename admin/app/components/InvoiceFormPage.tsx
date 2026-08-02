@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import type { InvoiceType, Item } from "@/lib/supabase";
+import type { InvoiceType, Item, Customer } from "@/lib/supabase";
 import { Icons, Field, CustomSelect, fmtRp } from "./ui";
 import type { Pesanan } from "@/lib/supabase";
 
@@ -22,8 +22,12 @@ const STATUS_OPTIONS = [
 export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }: Props) {
   const [types, setTypes] = useState<InvoiceType[]>([]);
   const [katalog, setKatalog] = useState<Item[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [saving, setSaving] = useState(false);
   const [showKatalog, setShowKatalog] = useState(false);
+  const [showLogbook, setShowLogbook] = useState(false);
+  const [logbookSearch, setLogbookSearch] = useState("");
+  const [saveToLogbook, setSaveToLogbook] = useState(false);
 
   const [form, setForm] = useState({
     invoice_type_id: "",
@@ -40,10 +44,15 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
   const [items, setItems] = useState<LineItem[]>([]);
 
   const load = useCallback(async () => {
-    const [tRes, kRes] = await Promise.all([fetch("/api/invoice-types"), fetch("/api/items")]);
+    const [tRes, kRes, cRes] = await Promise.all([
+      fetch("/api/invoice-types"),
+      fetch("/api/items"),
+      fetch("/api/customers?active=true"),
+    ]);
     const t = await tRes.json();
     setTypes(t);
     setKatalog(await kRes.json());
+    if (cRes.ok) setCustomers(await cRes.json());
     if (t.length > 0) setForm(f => ({ ...f, invoice_type_id: String(t[0].id) }));
   }, []);
 
@@ -59,6 +68,18 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
   };
   const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
+
+  const pickCustomer = (c: Customer) => {
+    setForm(f => ({
+      ...f,
+      customer_name: c.nama,
+      customer_contact: c.no_hp ?? "",
+      customer_address: c.alamat ?? "",
+      customer_email: c.email ?? "",
+    }));
+    setShowLogbook(false);
+    setLogbookSearch("");
+  };
 
   const subtotal = items.reduce((s, it) => s + Number(it.qty) * Number(it.harga_satuan), 0);
   const discount = Number(form.discount) || 0;
@@ -84,11 +105,33 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
     };
     const res = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json();
+
+    // Auto-save customer to logbook if toggle is ON
+    if (res.ok && saveToLogbook && form.customer_name.trim()) {
+      await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: form.customer_name,
+          no_hp: form.customer_contact || null,
+          email: form.customer_email || null,
+          alamat: form.customer_address || null,
+          catatan: null,
+          is_active: true,
+        }),
+      });
+    }
+
     setSaving(false);
     if (res.ok && data.id) onSuccess(data.id);
   };
 
   const typeOptions = types.map(t => ({ value: String(t.id), label: t.nama }));
+  const filteredCustomers = customers.filter(c =>
+    c.nama.toLowerCase().includes(logbookSearch.toLowerCase()) ||
+    (c.no_hp ?? "").includes(logbookSearch) ||
+    (c.email ?? "").toLowerCase().includes(logbookSearch.toLowerCase())
+  );
 
   return (
     <div className="animate-in">
@@ -119,12 +162,59 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
           </div>
 
           <div className="card" style={{ padding: 18 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 14, letterSpacing: "0.06em", textTransform: "uppercase" }}>Data Customer</p>
+            {/* Card header with actions */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Data Customer</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* Pick from logbook button */}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setShowLogbook(true); setLogbookSearch(""); }}
+                  title="Pilih dari logbook"
+                >
+                  <Icons.Users /> Pilih dari Logbook
+                </button>
+              </div>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="Nama Customer" required><input className="input" placeholder="Nama lengkap..." value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} /></Field>
-              <Field label="No HP / Instagram"><input className="input" placeholder="08xx / @username" value={form.customer_contact} onChange={e => setForm(f => ({ ...f, customer_contact: e.target.value }))} /></Field>
-              <Field label="Email"><input className="input" type="email" placeholder="email@example.com" value={form.customer_email} onChange={e => setForm(f => ({ ...f, customer_email: e.target.value }))} /></Field>
-              <Field label="Alamat"><textarea className="input" rows={2} placeholder="Alamat pengiriman (opsional)..." value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: e.target.value }))} /></Field>
+              <Field label="Nama Customer" required>
+                <input className="input" placeholder="Nama lengkap..." value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} />
+              </Field>
+              <Field label="No HP">
+                <input className="input" placeholder="08xx..." value={form.customer_contact} onChange={e => setForm(f => ({ ...f, customer_contact: e.target.value }))} />
+              </Field>
+              <Field label="Email">
+                <input className="input" type="email" placeholder="email@example.com" value={form.customer_email} onChange={e => setForm(f => ({ ...f, customer_email: e.target.value }))} />
+              </Field>
+              <Field label="Alamat">
+                <textarea className="input" rows={2} placeholder="Alamat pengiriman (opsional)..." value={form.customer_address} onChange={e => setForm(f => ({ ...f, customer_address: e.target.value }))} />
+              </Field>
+
+              {/* Save to logbook toggle */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 14px", borderRadius: 8,
+                background: saveToLogbook ? "rgba(52,211,153,0.08)" : "var(--bg-card-2)",
+                border: `1px solid ${saveToLogbook ? "rgba(52,211,153,0.25)" : "var(--border)"}`,
+                transition: "all 0.2s",
+              }}>
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: saveToLogbook ? "#34d399" : "var(--text-secondary)" }}>
+                    💾 Simpan ke Logbook Customer
+                  </p>
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                    {saveToLogbook
+                      ? "Data customer akan otomatis disimpan ke logbook setelah invoice dibuat"
+                      : "Aktifkan untuk menyimpan data customer ke logbook"}
+                  </p>
+                </div>
+                <div
+                  className={`toggle ${saveToLogbook ? "on" : ""}`}
+                  onClick={() => setSaveToLogbook(v => !v)}
+                  style={{ flexShrink: 0 }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -196,7 +286,7 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
         </div>
       </div>
 
-      {/* Katalog Modal */}
+      {/* ── Katalog Modal ── */}
       {showKatalog && (
         <div className="modal-overlay" onClick={() => setShowKatalog(false)}>
           <div className="modal-box" style={{ maxWidth: 700 }} onClick={e => e.stopPropagation()}>
@@ -225,6 +315,91 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Logbook Customer Modal ── */}
+      {showLogbook && (
+        <div className="modal-overlay" onClick={() => setShowLogbook(false)}>
+          <div className="modal-box" style={{ maxWidth: 620 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>Pilih dari Logbook Customer</h3>
+                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{customers.length} customer tersedia</p>
+              </div>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowLogbook(false)}><Icons.X /></button>
+            </div>
+
+            {/* Search in logbook */}
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
+                  <Icons.Search />
+                </span>
+                <input
+                  className="input"
+                  style={{ paddingLeft: 34 }}
+                  placeholder="Cari nama, HP, atau email..."
+                  value={logbookSearch}
+                  onChange={e => setLogbookSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: 12, maxHeight: "55vh", overflowY: "auto" }}>
+              {filteredCustomers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+                  <p style={{ fontSize: 13 }}>
+                    {customers.length === 0 ? "Logbook masih kosong. Tambah customer terlebih dahulu." : "Tidak ada customer yang cocok."}
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {filteredCustomers.map(c => (
+                    <div
+                      key={c.id}
+                      className="catalog-row"
+                      onClick={() => pickCustomer(c)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "10px 14px", borderRadius: 8,
+                        background: "var(--bg-card-2)", border: "1px solid var(--border)",
+                        cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      {/* Avatar */}
+                      <div style={{
+                        width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                        background: `hsl(${(c.id * 47) % 360}, 60%, 20%)`,
+                        border: `1px solid hsl(${(c.id * 47) % 360}, 60%, 40%)`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, fontWeight: 700,
+                        color: `hsl(${(c.id * 47) % 360}, 80%, 70%)`,
+                      }}>
+                        {c.nama.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{c.nama}</p>
+                        <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                          {[c.no_hp, c.email].filter(Boolean).join(" · ") || "Tidak ada kontak"}
+                        </p>
+                      </div>
+                      {c.alamat && (
+                        <p style={{ fontSize: 11, color: "var(--text-subtle)", maxWidth: 140, textAlign: "right" }}>
+                          {c.alamat.length > 35 ? c.alamat.slice(0, 35) + "…" : c.alamat}
+                        </p>
+                      )}
+                      <span style={{ color: "#34d399", flexShrink: 0 }}>
+                        <Icons.UserCheck />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
