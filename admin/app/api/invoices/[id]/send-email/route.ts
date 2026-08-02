@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import nodemailer from "nodemailer";
 import { supabase } from "@/lib/supabase";
+import { renderToBuffer } from "@react-pdf/renderer";
+import type { DocumentProps } from "@react-pdf/renderer";
+import React from "react";
+import { InvoicePDFDocument } from "@/lib/invoice-pdf";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -14,75 +18,122 @@ function buildEmailHtml(invoice: {
   invoice_items?: { description: string; qty: number; satuan: string; harga_satuan: number; total_harga: number }[];
   subtotal: number; discount: number; dp_amount: number; grand_total: number; catatan?: string | null;
 }, company: { nama_toko: string; logo_url?: string | null; instagram?: string | null; no_hp?: string | null }) {
-  const statusColor: Record<string, string> = { PAID: "#10b981", DP: "#f59e0b", UNPAID: "#ef4444", CANCELLED: "#94a3b8" };
-  const color = statusColor[invoice.status_pembayaran] ?? "#94a3b8";
+  const statusColors: Record<string, {bg: string; text: string; border: string}> = { 
+    PAID: {bg: "rgba(16,185,129,0.15)", text: "#10b981", border: "rgba(16,185,129,0.3)"}, 
+    DP: {bg: "rgba(245,158,11,0.15)", text: "#f59e0b", border: "rgba(245,158,11,0.3)"}, 
+    UNPAID: {bg: "rgba(239,68,68,0.12)", text: "#ef4444", border: "rgba(239,68,68,0.25)"}, 
+    CANCELLED: {bg: "rgba(100,116,139,0.1)", text: "#94a3b8", border: "rgba(100,116,139,0.2)"} 
+  };
+  const st = statusColors[invoice.status_pembayaran] ?? statusColors.CANCELLED;
   const itemsHtml = (invoice.invoice_items ?? []).map(it => `
     <tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;">${it.description}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${it.qty} ${it.satuan}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">${fmtRp(it.harga_satuan)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">${fmtRp(it.total_harga)}</td>
+      <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#1e293b;">${it.description}</td>
+      <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#1e293b;text-align:center;">${it.qty} ${it.satuan}</td>
+      <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#1e293b;text-align:right;">${fmtRp(it.harga_satuan)}</td>
+      <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#1e293b;text-align:right;font-weight:600;">${fmtRp(it.total_harga)}</td>
     </tr>`).join("");
+    
+  const subtotalNet = invoice.subtotal - invoice.discount;
+  const sisaTagihan = Math.max(0, subtotalNet - invoice.dp_amount);
+  const isLunas = invoice.dp_amount > 0 && sisaTagihan === 0;
 
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Invoice ${invoice.invoice_no}</title></head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;">
-<div style="max-width:640px;margin:32px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-  <!-- Header -->
-  <div style="background:linear-gradient(135deg,#7c3aed,#ec4899);padding:32px;text-align:center;">
-    <h1 style="color:white;margin:0;font-size:28px;font-weight:700;">${company.nama_toko}</h1>
-    <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">Handmade Crochet Dolls & Beaded Accessories</p>
-  </div>
-  <!-- Invoice Info -->
-  <div style="padding:28px 32px;border-bottom:1px solid #e2e8f0;">
-    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-      <div>
-        <p style="margin:0 0 4px;font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;">Bill To</p>
-        <p style="margin:0;font-size:18px;font-weight:700;color:#0f172a;">${invoice.customer_name}</p>
-        ${invoice.customer_contact ? `<p style="margin:4px 0 0;font-size:13px;color:#64748b;">${invoice.customer_contact}</p>` : ""}
-        <p style="margin:8px 0 0;font-size:13px;color:#7c3aed;font-weight:600;">${invoice.invoice_type?.nama ?? "Invoice"}</p>
-      </div>
-      <div style="text-align:right;">
-        <p style="margin:0 0 4px;font-size:12px;color:#64748b;">Invoice Date: <strong style="color:#0f172a;">${new Date(invoice.invoice_date).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})}</strong></p>
-        <p style="margin:0 0 12px;font-size:12px;color:#64748b;">Invoice No: <strong style="color:#0f172a;font-family:monospace;">${invoice.invoice_no}</strong></p>
-        <span style="display:inline-block;padding:6px 16px;border-radius:999px;background:${color}20;color:${color};font-size:12px;font-weight:700;border:1px solid ${color}40;">${invoice.status_pembayaran}</span>
-      </div>
-    </div>
-  </div>
-  <!-- Items Table -->
-  <div style="padding:0 32px;">
-    <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:0.05em;">Deskripsi</th>
-          <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;">Qty</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;">Harga</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;">Total</th>
-        </tr>
-      </thead>
-      <tbody>${itemsHtml}</tbody>
-    </table>
-  </div>
+<body style="margin:0;padding:32px 16px;background:#f1f5f9;font-family:Arial,sans-serif;">
+<div style="max-width:800px;margin:0 auto;background:white;border-radius:12px;padding:40px 48px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+  
+  <!-- Header Grid -->
+  <table style="width:100%;margin-bottom:24px;" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="vertical-align:top;width:33%;">
+        <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#6ca0a8;">Bill To :</p>
+        <p style="margin:0 0 4px;font-size:18px;font-weight:700;color:#0f172a;">${invoice.customer_name}</p>
+        ${invoice.customer_contact ? `<p style="margin:0;font-size:13px;color:#64748b;">${invoice.customer_contact}</p>` : ""}
+        <p style="margin:16px 0 0;font-size:14px;font-weight:600;color:#6ca0a8;">Type : <strong style="color:#0f172a;">${invoice.invoice_type?.nama ?? "Invoice"}</strong></p>
+      </td>
+      <td style="vertical-align:top;text-align:center;width:33%;">
+        <img src="${APP_URL}/Logo_DynoBoo.png" alt="DynoBoo" style="max-height:60px;max-width:140px;object-fit:contain;" />
+        <p style="margin:4px 0 0;font-size:10px;color:#94a3b8;">CROCHET DOLLS &amp; BEADED ACCESSORIES</p>
+      </td>
+      <td style="vertical-align:top;text-align:right;width:33%;">
+        <p style="margin:0 0 6px;font-size:13px;color:#475569;"><span style="color:#94a3b8;">Invoice Date : </span><strong style="color:#475569;">${new Date(invoice.invoice_date).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})}</strong></p>
+        <p style="margin:0 0 16px;font-size:13px;color:#475569;"><span style="color:#94a3b8;">Invoice No : </span><strong style="font-family:monospace;color:#475569;">${invoice.invoice_no}</strong></p>
+        <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:#475569;">Status Pembayaran</p>
+        <span style="display:inline-block;padding:8px 20px;border-radius:6px;background:${st.bg};color:${st.text};font-size:13px;font-weight:700;border:1px solid ${st.border};letter-spacing:0.05em;">${invoice.status_pembayaran}</span>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Divider -->
+  <div style="height:1.5px;background:#1e293b;margin:24px 0;"></div>
+
+  <!-- Table -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+    <thead>
+      <tr style="background:#e8f4f6;">
+        <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#6ca0a8;">DESCRIPTION</th>
+        <th style="padding:12px 16px;text-align:center;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#6ca0a8;">QTY.</th>
+        <th style="padding:12px 16px;text-align:right;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#6ca0a8;">PRICE</th>
+        <th style="padding:12px 16px;text-align:right;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#6ca0a8;">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+
+  <!-- Divider -->
+  <div style="height:1.5px;background:#1e293b;margin:24px 0;"></div>
+
   <!-- Totals -->
-  <div style="padding:0 32px 28px;">
-    <div style="max-width:280px;margin-left:auto;">
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#64748b;"><span>Subtotal</span><span>${fmtRp(invoice.subtotal)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#64748b;"><span>Diskon</span><span>${fmtRp(invoice.discount)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#64748b;"><span>DP</span><span>${fmtRp(invoice.dp_amount)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:14px 16px;background:linear-gradient(135deg,#7c3aed20,#ec489920);border-radius:8px;margin-top:8px;">
-        <span style="font-size:16px;font-weight:700;color:#7c3aed;">Grand Total</span>
-        <span style="font-size:16px;font-weight:700;color:#7c3aed;">${fmtRp(invoice.grand_total)}</span>
-      </div>
-    </div>
-  </div>
-  ${invoice.catatan ? `<div style="padding:0 32px 28px;"><p style="margin:0 0 6px;font-size:12px;color:#64748b;font-weight:700;">Catatan:</p><p style="margin:0;font-size:12px;color:#475569;line-height:1.6;">${invoice.catatan}</p></div>` : ""}
-  <!-- CTA -->
-  <div style="padding:0 32px 32px;text-align:center;">
-    <a href="${APP_URL}/invoice/${invoice.invoice_no}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#7c3aed,#ec4899);color:white;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Lihat Invoice Online</a>
-  </div>
-  <!-- Footer -->
-  <div style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
-    <p style="margin:0;font-size:12px;color:#94a3b8;">${company.nama_toko} ${company.instagram ? `• ${company.instagram}` : ""} ${company.no_hp ? `• ${company.no_hp}` : ""}</p>
+  <table style="width:100%;margin-bottom:24px;" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="width:60%;"></td>
+      <td style="width:40%;">
+        <table style="width:100%;font-size:14px;color:#475569;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding:6px 0;text-align:right;font-weight:600;">Total</td>
+            <td style="padding:6px 0;text-align:right;width:120px;">${fmtRp(invoice.subtotal)}</td>
+          </tr>
+          ${invoice.discount > 0 ? `
+          <tr>
+            <td style="padding:6px 0;text-align:right;font-weight:600;">Discount</td>
+            <td style="padding:6px 0;text-align:right;color:#ef4444;">- ${fmtRp(invoice.discount)}</td>
+          </tr>` : ""}
+          <tr>
+            <td colspan="2" style="padding-top:8px;">
+              <table style="width:100%;background:#e8f4f6;border-radius:8px;padding:14px 20px;">
+                <tr>
+                  <td style="text-align:right;font-weight:700;font-size:18px;color:#6ca0a8;">Grand Total</td>
+                  <td style="text-align:right;font-weight:700;font-size:18px;color:#6ca0a8;width:120px;">${fmtRp(subtotalNet)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ${invoice.dp_amount > 0 ? `
+          <tr>
+            <td style="padding:14px 0 6px;text-align:right;font-weight:600;color:#10b981;">DP Dibayar</td>
+            <td style="padding:14px 0 6px;text-align:right;color:#10b981;width:120px;">- ${fmtRp(invoice.dp_amount)}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding-top:4px;">
+              <table style="width:100%;background:${isLunas ? "rgba(16,185,129,0.12)" : "#fff3cd"};border-radius:8px;padding:14px 20px;">
+                <tr>
+                  <td style="text-align:right;font-weight:700;color:${isLunas ? "#10b981" : "#d97706"};">${isLunas ? "✓ LUNAS" : "Sisa Tagihan"}</td>
+                  <td style="text-align:right;font-weight:700;color:${isLunas ? "#10b981" : "#d97706"};width:120px;">${fmtRp(sisaTagihan)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ` : ""}
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Catatan -->
+  ${invoice.catatan ? `<div style="border-top:1px solid #e2e8f0;padding-top:16px;margin-bottom:32px;"><p style="margin:0 0 6px;font-size:12px;color:#6ca0a8;font-weight:700;">Catatan :</p><p style="margin:0;font-size:12px;color:#64748b;line-height:1.7;white-space:pre-line;">${invoice.catatan}</p></div>` : ""}
+
+  <div style="text-align:center;margin-top:24px;">
+    <a href="${APP_URL}/invoice/${invoice.invoice_no}" style="display:inline-block;padding:12px 28px;background:#0f172a;color:white;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Lihat Invoice Online</a>
   </div>
 </div></body></html>`;
 }
@@ -113,6 +164,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const html = buildEmailHtml(invoice, comp);
 
+  // Generate PDF buffer from invoice data
+  let pdfBuffer: Buffer;
+  try {
+    const pdfDoc = React.createElement(
+      InvoicePDFDocument,
+      { invoice, company: comp, appUrl: APP_URL }
+    ) as React.ReactElement<DocumentProps>;
+    const uint8Array = await renderToBuffer(pdfDoc);
+    pdfBuffer = Buffer.from(uint8Array);
+  } catch (pdfErr: unknown) {
+    const msg = pdfErr instanceof Error ? pdfErr.message : "Gagal generate PDF";
+    return Response.json({ error: `Gagal membuat PDF: ${msg}` }, { status: 500 });
+  }
+
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -127,6 +192,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       to: customer_email,
       subject: `Invoice ${invoice.invoice_no} dari ${comp.nama_toko}`,
       html,
+      attachments: [
+        {
+          filename: `Invoice-${invoice.invoice_no}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
     });
 
     // Save email to invoice record
