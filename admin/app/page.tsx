@@ -1916,6 +1916,13 @@ export default function AdminPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{userName}</span>
               <div style={{ padding: "4px 10px", borderRadius: 6, background: userRole === "superadmin" ? "rgba(56,189,248,0.12)" : "rgba(167,139,250,0.12)", border: userRole === "superadmin" ? "1px solid rgba(56,189,248,0.25)" : "1px solid rgba(167,139,250,0.25)", fontSize: 11, color: userRole === "superadmin" ? "#38bdf8" : "#a78bfa", fontWeight: 700, textTransform: "uppercase" }}>{userRole}</div>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={logout} title="Logout" style={{ marginLeft: 4, color: "#ef4444", borderColor: "rgba(239,68,68,0.2)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
