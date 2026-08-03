@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  const searchParams = request.nextUrl.searchParams;
   const status = searchParams.get("status");
   const typeId = searchParams.get("type_id");
   const month = searchParams.get("month"); // format: "2607"

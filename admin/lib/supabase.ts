@@ -61,6 +61,7 @@ export type AdminUser = {
   id: number;
   username: string;
   role: "superadmin" | "admin";
+  permissions?: string[];
   created_at: string;
 };
 

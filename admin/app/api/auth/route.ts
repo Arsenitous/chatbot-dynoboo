@@ -52,9 +52,56 @@ export async function POST(request: NextRequest) {
     sameSite: "lax",
   });
 
-  return Response.json({ ok: true, username, role: user?.role ?? "superadmin" });
+  let userRole = user?.role;
+  let userPerms = user?.permissions ?? [];
+
+  if (!user && username === process.env.ADMIN_USERNAME) {
+    userRole = "superadmin";
+    userPerms = ["all"];
+  } else if (!userRole) {
+    userRole = "admin";
+  }
+
+  return Response.json({ 
+    ok: true, 
+    username, 
+    role: userRole,
+    permissions: userPerms 
+  });
 }
 
+export async function GET() {
+  const cookieStore = await cookies();
+  const username = cookieStore.get("dynoboo_user")?.value;
+  const sessionToken = cookieStore.get("dynoboo_session")?.value;
+  
+  if (!username || !sessionToken) {
+    return Response.json({ ok: false }, { status: 401 });
+  }
+
+  const { data: user } = await supabase
+    .from("admin_users")
+    .select("role, permissions")
+    .eq("username", username)
+    .single();
+
+  let userRole = user?.role;
+  let userPerms = user?.permissions ?? [];
+
+  if (!user && username === process.env.ADMIN_USERNAME) {
+    userRole = "superadmin";
+    userPerms = ["all"];
+  } else if (!userRole) {
+    userRole = "admin";
+  }
+
+  return Response.json({ 
+    ok: true, 
+    username, 
+    role: userRole,
+    permissions: userPerms 
+  });
+}
 
 export async function DELETE() {
   const cookieStore = await cookies();

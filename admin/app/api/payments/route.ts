@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  const searchParams = request.nextUrl.searchParams;
   const invoiceId = searchParams.get("invoice_id");
   let query = supabase.from("payments").select("*").order("created_at", { ascending: false });
   if (invoiceId) query = query.eq("invoice_id", invoiceId);

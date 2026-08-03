@@ -28,7 +28,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { searchParams } = new URL(request.url);
+  const searchParams = request.nextUrl.searchParams;
   const itemId = searchParams.get("item_id");
   if (!itemId) return Response.json({ error: "item_id required" }, { status: 400 });
 

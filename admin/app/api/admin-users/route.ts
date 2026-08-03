@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const { data, error } = await supabase
     .from("admin_users")
-    .select("id, username, role, created_at")
+    .select("id, username, role, created_at, permissions")
     .order("id", { ascending: true });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { username, password, role } = await request.json();
+  const { username, password, role, permissions } = await request.json();
 
   // Cek username belum ada
   const { data: existing } = await supabase
@@ -33,7 +33,12 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("admin_users")
-    .insert({ username, password_hash: hash, role: role ?? "admin" })
+    .insert({ 
+      username, 
+      password_hash: hash, 
+      role: role ?? "admin",
+      permissions: permissions ?? []
+    })
     .select("id, username, role, created_at")
     .single();
 

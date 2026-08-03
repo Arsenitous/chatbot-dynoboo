@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Invoice, Payment, CompanyProfile } from "@/lib/supabase";
 import { Icons, Modal, Field, CustomSelect, InvoiceStatusBadge, fmtRp } from "./ui";
+import { useAccess } from "./AccessContext";
 
 type Props = { invoiceId: number; onBack: () => void; onEdit?: (id: number) => void; };
 
@@ -18,6 +19,9 @@ const TIPE_OPTIONS = [
 ];
 
 export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
+  const hasAccess = useAccess();
+  const canUpdate = hasAccess("invoice", "update");
+  const canDelete = hasAccess("invoice", "delete");
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +32,7 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
   const [emailSent, setEmailSent] = useState(false);
   const [payForm, setPayForm] = useState({ tanggal_bayar: new Date().toISOString().split("T")[0], jumlah: "", metode: "Transfer", tipe: "DP", catatan: "" });
   const [savingPay, setSavingPay] = useState(false);
+  const [deletingPayment, setDeletingPayment] = useState<Payment | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -50,9 +55,11 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
     setSavingPay(false); setShowPayment(false); load();
   };
 
-  const deletePayment = async (id: number) => {
-    if (!confirm("Hapus pembayaran ini?")) return;
-    await fetch(`/api/payments/${id}`, { method: "DELETE" }); load();
+  const deletePayment = async () => {
+    if (!deletingPayment) return;
+    await fetch(`/api/payments/${deletingPayment.id}`, { method: "DELETE" }); 
+    setDeletingPayment(null);
+    load();
   };
 
   const sendEmail = async () => {
@@ -136,7 +143,9 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={sendWhatsApp}><Icons.Whatsapp /> WhatsApp</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowEmail(true)}><Icons.Mail /> Email</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowPayment(true)}><Icons.CreditCard /> Catat Bayar</button>
+          {canUpdate && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowPayment(true)}><Icons.CreditCard /> Catat Bayar</button>
+          )}
           <button className="btn btn-primary btn-sm" onClick={handlePrint}><Icons.Printer /> Print / PDF</button>
         </div>
       </div>
@@ -238,7 +247,7 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
             <p style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "20px 0" }}>Belum ada pembayaran tercatat.</p>
           ) : (
             <table className="data-table">
-              <thead><tr><th>Tanggal</th><th>Jumlah</th><th>Tipe</th><th>Metode</th><th>Catatan</th><th style={{ width: 60 }}>Aksi</th></tr></thead>
+              <thead><tr><th>Tanggal</th><th>Jumlah</th><th>Tipe</th><th>Metode</th><th>Catatan</th>{canDelete && <th style={{ width: 60 }}>Aksi</th>}</tr></thead>
               <tbody>
                 {payments.map((p: Payment) => (
                   <tr key={p.id}>
@@ -247,7 +256,7 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
                     <td><span className="badge badge-ai">{p.tipe}</span></td>
                     <td style={{ fontSize: 12 }}>{p.metode}</td>
                     <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{p.catatan ?? "—"}</td>
-                    <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => deletePayment(p.id)}><Icons.Trash /></button></td>
+                    {canDelete && <td><button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingPayment(p)}><Icons.Trash /></button></td>}
                   </tr>
                 ))}
               </tbody>
@@ -302,6 +311,30 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
                 </div>
               </>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {deletingPayment && (
+        <Modal title="Hapus Riwayat Pembayaran" onClose={() => setDeletingPayment(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{fmtRp(deletingPayment.jumlah)}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{new Date(deletingPayment.tanggal_bayar).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} • {deletingPayment.tipe}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus pembayaran ini? Total terbayar dan status invoice akan dihitung ulang.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={deletePayment}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingPayment(null)}>Batal</button>
+            </div>
           </div>
         </Modal>
       )}

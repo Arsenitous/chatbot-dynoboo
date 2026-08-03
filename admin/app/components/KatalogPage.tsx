@@ -2,8 +2,14 @@
 import { useState, useCallback, useEffect } from "react";
 import type { Item, ItemType } from "@/lib/supabase";
 import { Icons, Modal, Field, CustomSelect, fmtRp, useToast } from "./ui";
+import { useAccess } from "./AccessContext";
 
 export default function KatalogPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("produk_ws", "create");
+  const canUpdate = hasAccess("produk_ws", "update");
+  const canDelete = hasAccess("produk_ws", "delete");
+  const canManageTypes = canCreate || canDelete;
   const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
   const [itemTypes, setItemTypes] = useState<ItemType[]>([]);
@@ -16,6 +22,8 @@ export default function KatalogPage() {
 
   const [addingTypeModal, setAddingTypeModal] = useState(false);
   const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "📦" });
+  const [deletingItemType, setDeletingItemType] = useState<{ id: number; nama: string } | null>(null);
+  const [deletingItem, setDeletingItem] = useState<Item | null>(null);
 
   const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
   const [form, setForm] = useState(emptyForm);
@@ -84,19 +92,18 @@ export default function KatalogPage() {
     }
   };
 
-  const deleteType = async (id: number, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus tipe item "${nama}"?\n\nPerhatian: Item yang terhubung ke tipe ini akan kehilangan kategori tipenya.`)) {
-      return;
-    }
+  const deleteType = async () => {
+    if (!deletingItemType) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/item-types/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/item-types/${deletingItemType.id}`, { method: "DELETE" });
       if (res.ok) {
-        setItemTypes(prev => prev.filter(t => t.id !== id));
-        if (form.item_type_id === String(id)) {
+        setItemTypes(prev => prev.filter(t => t.id !== deletingItemType.id));
+        if (form.item_type_id === String(deletingItemType.id)) {
           setForm(f => ({ ...f, item_type_id: "" }));
         }
-        showToast(`Tipe item "${nama}" berhasil dihapus!`);
+        showToast(`Tipe item "${deletingItemType.nama}" berhasil dihapus!`);
+        setDeletingItemType(null);
         load();
       } else {
         const err = await res.json();
@@ -109,10 +116,11 @@ export default function KatalogPage() {
     }
   };
 
-  const del = async (id: number) => {
-    if (!confirm("Hapus item ini? Ini akan menghapus stok terkait juga.")) return;
-    await fetch(`/api/items/${id}`, { method: "DELETE" });
+  const del = async () => {
+    if (!deletingItem) return;
+    await fetch(`/api/items/${deletingItem.id}`, { method: "DELETE" });
     showToast("Item katalog berhasil dihapus!");
+    setDeletingItem(null);
     load();
   };
 
@@ -133,9 +141,13 @@ export default function KatalogPage() {
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{items.length} item terdaftar</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }}><Icons.Layers /> Kelola Tipe</button>
+          {canManageTypes && (
+            <button className="btn btn-secondary btn-sm" onClick={() => { setNewTypeForm({ nama: "", icon: "📦" }); setAddingTypeModal(true); }}><Icons.Layers /> Kelola Tipe</button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Item</button>
+          {canCreate && (
+            <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Item</button>
+          )}
         </div>
       </div>
 
@@ -164,7 +176,7 @@ export default function KatalogPage() {
               <th>Harga Normal</th>
               <th>Harga Promo</th>
               <th>Status</th>
-              <th style={{ width: 90 }}>Aksi</th>
+              {(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}
             </tr></thead>
             <tbody>
               {filtered.map(item => (
@@ -179,12 +191,14 @@ export default function KatalogPage() {
                   <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{fmtRp(item.harga_normal)}</td>
                   <td style={{ color: "#34d399", fontWeight: 600 }}>{item.harga_promo ? fmtRp(item.harga_promo) : <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                   <td><span className={`badge ${item.is_active ? "badge-active" : "badge-closed"}`}>{item.is_active ? "Aktif" : "Nonaktif"}</span></td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(item)}><Icons.Edit /></button>
-                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(item.id)}><Icons.Trash /></button>
-                    </div>
-                  </td>
+                  {(canUpdate || canDelete) && (
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(item)}><Icons.Edit /></button>}
+                        {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingItem(item)}><Icons.Trash /></button>}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>📦 Belum ada item di katalog</td></tr>}
@@ -265,9 +279,11 @@ export default function KatalogPage() {
                       <span style={{ fontSize: 18 }}>{t.icon || "📦"}</span>
                       <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{t.nama}</span>
                     </div>
-                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteType(t.id, t.nama)} disabled={saving} title={`Hapus ${t.nama}`}>
-                      <Icons.Trash />
-                    </button>
+                    {canDelete && (
+                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingItemType({ id: t.id, nama: t.nama })} disabled={saving} title={`Hapus ${t.nama}`}>
+                        <Icons.Trash />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {itemTypes.length === 0 && (
@@ -278,6 +294,52 @@ export default function KatalogPage() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
               <button className="btn btn-secondary" onClick={() => setAddingTypeModal(false)}>Tutup</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {deletingItemType && (
+        <Modal title="Hapus Tipe Item" onClose={() => setDeletingItemType(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingItemType.nama}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Apakah Anda yakin ingin menghapus tipe item ini? Perhatian: Item yang terhubung ke tipe ini akan kehilangan kategori tipenya.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={deleteType}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingItemType(null)}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {deletingItem && (
+        <Modal title="Hapus Item Katalog" onClose={() => setDeletingItem(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingItem.nama}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{fmtRp(deletingItem.harga_normal)}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus item ini? Ini akan menghapus stok terkait juga secara permanen.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={del}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingItem(null)}>Batal</button>
             </div>
           </div>
         </Modal>

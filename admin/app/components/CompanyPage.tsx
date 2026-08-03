@@ -2,10 +2,13 @@
 import { useState, useCallback, useEffect } from "react";
 import type { CompanyProfile } from "@/lib/supabase";
 import { Icons, Field, fmtRp } from "./ui";
+import { useAccess } from "./AccessContext";
 
 type RekeningItem = { bank: string; no_rek: string; atas_nama: string };
 
 export default function CompanyPage() {
+  const hasAccess = useAccess();
+  const canUpdate = hasAccess("settings", "update");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,9 +99,11 @@ export default function CompanyPage() {
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Profil Toko</h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Identitas toko yang tampil di header invoice cetak</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-          <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Perubahan"}
-        </button>
+        {canUpdate && (
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
+            <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Perubahan"}
+          </button>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -106,20 +111,20 @@ export default function CompanyPage() {
           <div className="card" style={{ padding: 20 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 16, letterSpacing: "0.06em", textTransform: "uppercase" }}>Identitas Toko</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="Nama Toko" required><input className="input" value={form.nama_toko} onChange={e => setForm(f => ({ ...f, nama_toko: e.target.value }))} placeholder="DynoBoo" /></Field>
-              <Field label="Tagline"><input className="input" value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="Handmade Crochet Dolls & Beaded Accessories" /></Field>
-              <Field label="Kota"><input className="input" value={form.kota} onChange={e => setForm(f => ({ ...f, kota: e.target.value }))} placeholder="Jakarta, Indonesia" /></Field>
-              <Field label="Alamat Lengkap"><textarea className="input" rows={2} value={form.alamat} onChange={e => setForm(f => ({ ...f, alamat: e.target.value }))} placeholder="Jl. ..." /></Field>
-              <Field label="URL Logo (opsional)"><input className="input" value={form.logo_url} onChange={e => setForm(f => ({ ...f, logo_url: e.target.value }))} placeholder="https://..." /></Field>
+              <Field label="Nama Toko" required><input className="input" disabled={!canUpdate} value={form.nama_toko} onChange={e => setForm(f => ({ ...f, nama_toko: e.target.value }))} placeholder="DynoBoo" /></Field>
+              <Field label="Tagline"><input className="input" disabled={!canUpdate} value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="Handmade Crochet Dolls & Beaded Accessories" /></Field>
+              <Field label="Kota"><input className="input" disabled={!canUpdate} value={form.kota} onChange={e => setForm(f => ({ ...f, kota: e.target.value }))} placeholder="Jakarta, Indonesia" /></Field>
+              <Field label="Alamat Lengkap"><textarea className="input" disabled={!canUpdate} rows={2} value={form.alamat} onChange={e => setForm(f => ({ ...f, alamat: e.target.value }))} placeholder="Jl. ..." /></Field>
+              <Field label="URL Logo (opsional)"><input className="input" disabled={!canUpdate} value={form.logo_url} onChange={e => setForm(f => ({ ...f, logo_url: e.target.value }))} placeholder="https://..." /></Field>
             </div>
           </div>
 
           <div className="card" style={{ padding: 20 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 16, letterSpacing: "0.06em", textTransform: "uppercase" }}>Kontak</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="No HP / WhatsApp"><input className="input" value={form.no_hp} onChange={e => setForm(f => ({ ...f, no_hp: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
-              <Field label="Email"><input className="input" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="dynoboo@email.com" /></Field>
-              <Field label="Instagram"><input className="input" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} placeholder="@dynoboo" /></Field>
+              <Field label="No HP / WhatsApp"><input className="input" disabled={!canUpdate} value={form.no_hp} onChange={e => setForm(f => ({ ...f, no_hp: e.target.value }))} placeholder="08xxxxxxxxxx" /></Field>
+              <Field label="Email"><input className="input" disabled={!canUpdate} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="dynoboo@email.com" /></Field>
+              <Field label="Instagram"><input className="input" disabled={!canUpdate} value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} placeholder="@dynoboo" /></Field>
             </div>
           </div>
         </div>
@@ -128,7 +133,7 @@ export default function CompanyPage() {
           <div className="card" style={{ padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Rekening Pembayaran</p>
-              <button className="btn btn-secondary btn-sm" onClick={addRek}><Icons.Plus /> Tambah</button>
+              {canUpdate && <button className="btn btn-secondary btn-sm" onClick={addRek}><Icons.Plus /> Tambah</button>}
             </div>
             {form.rekening.length === 0 ? (
               <p style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "20px 0" }}>Belum ada rekening. Klik + Tambah.</p>
@@ -138,12 +143,12 @@ export default function CompanyPage() {
                   <div key={i} style={{ padding: 14, borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Rekening #{i + 1}</span>
-                      <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeRek(i)}><Icons.Trash /></button>
+                      {canUpdate && <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeRek(i)}><Icons.Trash /></button>}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <input className="input" placeholder="Nama Bank (BCA, BRI, Mandiri...)" value={rek.bank} onChange={e => updateRek(i, "bank", e.target.value)} />
-                      <input className="input" placeholder="Nomor Rekening" value={rek.no_rek} onChange={e => updateRek(i, "no_rek", e.target.value)} style={{ fontFamily: "monospace" }} />
-                      <input className="input" placeholder="Atas Nama" value={rek.atas_nama} onChange={e => updateRek(i, "atas_nama", e.target.value)} />
+                      <input className="input" disabled={!canUpdate} placeholder="Nama Bank (BCA, BRI, Mandiri...)" value={rek.bank} onChange={e => updateRek(i, "bank", e.target.value)} />
+                      <input className="input" disabled={!canUpdate} placeholder="Nomor Rekening" value={rek.no_rek} onChange={e => updateRek(i, "no_rek", e.target.value)} style={{ fontFamily: "monospace" }} />
+                      <input className="input" disabled={!canUpdate} placeholder="Atas Nama" value={rek.atas_nama} onChange={e => updateRek(i, "atas_nama", e.target.value)} />
                     </div>
                   </div>
                 ))}
@@ -181,9 +186,11 @@ export default function CompanyPage() {
           </div>
 
           {/* Save button (bottom) */}
-          <button className="btn btn-primary" style={{ justifyContent: "center", padding: "12px" }} onClick={save} disabled={saving}>
-            <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Semua Perubahan"}
-          </button>
+          {canUpdate && (
+            <button className="btn btn-primary" style={{ justifyContent: "center", padding: "12px" }} onClick={save} disabled={saving}>
+              <Icons.Save /> {saving ? "Menyimpan..." : "Simpan Semua Perubahan"}
+            </button>
+          )}
         </div>
       </div>
     </div>

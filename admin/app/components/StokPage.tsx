@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import { Icons, Modal, Field, fmtRp } from "./ui";
+import { useAccess } from "./AccessContext";
 
 type StockRow = {
   id: number;
@@ -25,6 +26,10 @@ type ItemRow = {
 type EditMode = "set" | "add" | "subtract";
 
 export default function StokPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("produk_ws", "create");
+  const canUpdate = hasAccess("produk_ws", "update");
+  const canDelete = hasAccess("produk_ws", "delete");
   const [stocks, setStocks] = useState<StockRow[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +39,7 @@ export default function StokPage() {
   const [editMode, setEditMode] = useState<EditMode>("set");
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState<number | null>(null);
+  const [resettingStok, setResettingStok] = useState<{item_id: number; nama: string} | null>(null);
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<"ALL" | "LOW_STOCK" | "TOP_SOLD">("ALL");
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
@@ -98,13 +104,14 @@ export default function StokPage() {
     setSaving(false);
   };
 
-  const resetStok = async (item_id: number, nama: string) => {
-    if (!confirm(`Reset stok "${nama}" ke 0?`)) return;
-    setResetting(item_id);
-    const r = await fetch(`/api/stocks/${item_id}`, { method: "DELETE" });
-    if (r.ok) showToast(`Stok ${nama} direset ke 0`);
+  const resetStok = async () => {
+    if (!resettingStok) return;
+    setResetting(resettingStok.item_id);
+    const r = await fetch(`/api/stocks/${resettingStok.item_id}`, { method: "DELETE" });
+    if (r.ok) showToast(`Stok ${resettingStok.nama} direset ke 0`);
     else showToast("Gagal reset stok", "err");
     setResetting(null);
+    setResettingStok(null);
     load();
   };
 
@@ -162,7 +169,7 @@ export default function StokPage() {
       </div>
 
       {/* ─── SECTION 1: Produk yang belum punya stok ─── */}
-      {unstockedItems.length > 0 && (
+      {canCreate && unstockedItems.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20, border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.04)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <span style={{ fontSize: 16 }}>⚠️</span>
@@ -282,7 +289,7 @@ export default function StokPage() {
               <th style={{ textAlign: "center" }}>Tersedia</th>
               <th style={{ textAlign: "center" }}>Terjual</th>
               <th style={{ textAlign: "center" }}>Reserved</th>
-              <th style={{ width: 140 }}>Aksi</th>
+              {(canUpdate || canDelete) && <th style={{ width: 140 }}>Aksi</th>}
             </tr></thead>
             <tbody>
               {filtered.map(s => (
@@ -306,16 +313,22 @@ export default function StokPage() {
                   </td>
                   <td style={{ textAlign: "center", color: "var(--text-secondary)" }}>{s.qty_sold}</td>
                   <td style={{ textAlign: "center", color: "#fbbf24" }}>{s.qty_reserved}</td>
-                  <td>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button className="btn btn-primary btn-sm" onClick={() => openEdit(s)}>
-                        <Icons.Edit /> Update
-                      </button>
-                      <button className="btn btn-danger btn-sm btn-icon" title="Reset ke 0" disabled={resetting === s.item_id} onClick={() => resetStok(s.item_id, s.item?.nama)}>
-                        <Icons.Trash />
-                      </button>
-                    </div>
-                  </td>
+                  {(canUpdate || canDelete) && (
+                    <td>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {canUpdate && (
+                          <button className="btn btn-primary btn-sm" onClick={() => openEdit(s)}>
+                            <Icons.Edit /> Update
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button className="btn btn-danger btn-sm btn-icon" onClick={() => setResettingStok({ item_id: s.item_id, nama: s.item?.nama ?? "" })} disabled={resetting === s.item_id} title="Reset stok ke 0">
+                              {resetting === s.item_id ? <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> : <Icons.Trash />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && (
@@ -384,6 +397,29 @@ export default function StokPage() {
                 <Icons.Save /> {saving ? "Menyimpan..." : addingFrom ? "Inisialisasi Stok" : "Update Stok"}
               </button>
               <button className="btn btn-secondary" onClick={() => { setEditing(null); setAddingFrom(null); }}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {resettingStok && (
+        <Modal title="Reset Stok" onClose={() => setResettingStok(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{resettingStok.nama}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin mereset stok ini kembali ke 0? Riwayat penjualan tidak akan hilang.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={resetStok}>Ya, Reset</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setResettingStok(null)}>Batal</button>
             </div>
           </div>
         </Modal>

@@ -15,6 +15,7 @@ import InvoiceDetailPage from "./components/InvoiceDetailPage";
 import CompanyPage from "./components/CompanyPage";
 import AiAssistantPage from "./components/AiAssistantPage";
 import CustomerPage from "./components/CustomerPage";
+import { AccessContext, useAccess } from "./components/AccessContext";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Page =
@@ -90,6 +91,11 @@ const NAV_GROUPS = [
     items: [
       { id: "company", label: "Profil Toko", icon: <Icons.Building /> },
       { id: "access", label: "Access Control", icon: <Icons.Lock /> },
+    ],
+  },
+  {
+    key: "EXTRA",
+    items: [
       { id: "ai-assistant", label: "AI Assistant", icon: <span style={{fontSize:14}}>🦖</span> },
       { id: "manual", label: "Buku Panduan", icon: <Icons.Book /> },
     ],
@@ -104,6 +110,7 @@ const GROUP_META: Record<string, { color: string; bg: string; emoji: string }> =
   CUSTOMER:      { color: "#fb7185", bg: "rgba(251,113,133,0.18)", emoji: "👥" },
   CHATBOT:       { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
   PENGATURAN:    { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
+  EXTRA:         { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "📌" },
 };
 
 function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GROUPS[number]; currentPage: Page; onNavigate: (page: Page) => void }) {
@@ -136,8 +143,8 @@ function SidebarGroup({ group, currentPage, onNavigate }: { group: typeof NAV_GR
     };
   };
 
-  // MENU group — no toggle
-  if (group.key === "MENU") {
+  // MENU or EXTRA group — no toggle
+  if (group.key === "MENU" || group.key === "EXTRA") {
     return (
       <div style={{ marginBottom: 6 }}>
         {group.items?.map((item) => {
@@ -243,6 +250,10 @@ function fmtDate(d: string) {
 // ─── InvoiceTypes page ─────────────────────────────────────────────────────────
 type InvoiceTypeRow = { id: number; nama: string; prefix: string; deskripsi: string | null; is_active: boolean };
 function InvoiceTypesPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("invoice", "create");
+  const canUpdate = hasAccess("invoice", "update");
+  const canDelete = hasAccess("invoice", "delete");
   const { showToast } = useToast();
   const [types, setTypes] = useState<InvoiceTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -250,6 +261,7 @@ function InvoiceTypesPage() {
   const [editing, setEditing] = useState<InvoiceTypeRow | null>(null);
   const [form, setForm] = useState({ nama: "", prefix: "", deskripsi: "", is_active: true });
   const [saving, setSaving] = useState(false);
+  const [deletingType, setDeletingType] = useState<InvoiceTypeRow | null>(null);
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/invoice-types"); setTypes(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
   const openAdd = () => { setForm({ nama: "", prefix: "", deskripsi: "", is_active: true }); setAdding(true); setEditing(null); };
@@ -264,22 +276,23 @@ function InvoiceTypesPage() {
     }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { 
-    if (!confirm("Hapus tipe invoice ini?")) return; 
-    await fetch(`/api/invoice-types/${id}`, { method: "DELETE" }); 
+  const del = async () => { 
+    if (!deletingType) return;
+    await fetch(`/api/invoice-types/${deletingType.id}`, { method: "DELETE" }); 
     showToast("Tipe invoice berhasil dihapus!");
+    setDeletingType(null);
     load(); 
   };
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Tipe Invoice</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola template jenis invoice (Workshop, Produk, Bouquet...)</p></div>
-        <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Tipe</button>
+        {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Tipe</button>}
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
           <table className="data-table">
-            <thead><tr><th>Nama</th><th>Prefix</th><th>Deskripsi</th><th>Contoh No.</th><th>Status</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+            <thead><tr><th>Nama</th><th>Prefix</th><th>Deskripsi</th><th>Contoh No.</th><th>Status</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
             <tbody>
               {types.map(t => (
                 <tr key={t.id}>
@@ -288,7 +301,14 @@ function InvoiceTypesPage() {
                   <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{t.deskripsi ?? "—"}</td>
                   <td><code style={{ fontSize: 11, color: "#38bdf8" }}>DNB-{t.prefix}-2608-0001</code></td>
                   <td><span className={`badge ${t.is_active ? "badge-active" : "badge-closed"}`}>{t.is_active ? "Aktif" : "Nonaktif"}</span></td>
-                  <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(t)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(t.id)}><Icons.Trash /></button></div></td>
+                  {(canUpdate || canDelete) && (
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(t)}><Icons.Edit /></button>}
+                        {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingType(t)}><Icons.Trash /></button>}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {types.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada tipe invoice</td></tr>}
@@ -307,6 +327,30 @@ function InvoiceTypesPage() {
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={save} disabled={saving || !form.nama || !form.prefix}><Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}</button>
               <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {deletingType && (
+        <Modal title="Hapus Tipe Invoice" onClose={() => setDeletingType(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingType.nama}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Prefix: {deletingType.prefix}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus tipe invoice ini secara permanen?</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={del}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingType(null)}>Batal</button>
             </div>
           </div>
         </Modal>
@@ -546,6 +590,10 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown
 // ─── Knowledge, Workshops, Pesanan, ChatLogs, Access pages ────────────────────
 
 function KnowledgePage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("chatbot", "create");
+  const canUpdate = hasAccess("chatbot", "update");
+  const canDelete = hasAccess("chatbot", "delete");
   const { showToast } = useToast();
   const [knowledges, setKnowledges] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -553,6 +601,7 @@ function KnowledgePage() {
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [deletingKnowledge, setDeletingKnowledge] = useState<KnowledgeBase | null>(null);
   const emptyForm = { keywords: "", jawaban_utama: "", pilihan_jawaban: [] as PilihanJawaban[], keterangan: "" };
   const [form, setForm] = useState(emptyForm);
 
@@ -581,10 +630,11 @@ function KnowledgePage() {
     }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { 
-    if (!confirm("Hapus?")) return; 
-    await fetch(`/api/knowledge/${id}`, { method: "DELETE" }); 
+  const del = async () => { 
+    if (!deletingKnowledge) return;
+    await fetch(`/api/knowledge/${deletingKnowledge.id}`, { method: "DELETE" }); 
     showToast("Knowledge Base berhasil dihapus!");
+    setDeletingKnowledge(null);
     load(); 
   };
   const addChoice = () => setForm(f => ({ ...f, pilihan_jawaban: [...f.pilihan_jawaban, { opsi: "", jawaban: "" }] }));
@@ -599,7 +649,7 @@ function KnowledgePage() {
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Knowledge Base</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{knowledges.length} entri tersimpan</p></div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button>
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button>}
         </div>
       </div>
       <div style={{ position: "relative", marginBottom: 16 }}>
@@ -610,7 +660,7 @@ function KnowledgePage() {
         {loading ? <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Keywords</th><th>Jawaban Utama</th><th>Pilihan</th><th>Catatan</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Keywords</th><th>Jawaban Utama</th><th>Pilihan</th><th>Catatan</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
               <tbody>
                 {filtered.map(k => (
                   <tr key={k.id}>
@@ -619,7 +669,14 @@ function KnowledgePage() {
                     <td style={{ maxWidth: 300 }}><p style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{k.jawaban_utama}</p></td>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.pilihan_jawaban?.length ?? 0} opsi</td>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.keterangan ?? "—"}</td>
-                    <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(k)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(k.id)}><Icons.Trash /></button></div></td>
+                    {(canUpdate || canDelete) && (
+                      <td>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(k)}><Icons.Edit /></button>}
+                          {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingKnowledge(k)}><Icons.Trash /></button>}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada data</td></tr>}
@@ -654,17 +711,46 @@ function KnowledgePage() {
           </div>
         </Modal>
       )}
+
+      {deletingKnowledge && (
+        <Modal title="Hapus Knowledge Base" onClose={() => setDeletingKnowledge(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingKnowledge.keywords}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{deletingKnowledge.jawaban_utama}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus entri knowledge base ini?</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={del}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingKnowledge(null)}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 function WorkshopsPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("produk_ws", "create");
+  const canUpdate = hasAccess("produk_ws", "update");
+  const canDelete = hasAccess("produk_ws", "delete");
   const { showToast } = useToast();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Workshop | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingWorkshop, setDeletingWorkshop] = useState<Workshop | null>(null);
   const emptyForm = { nama_workshop: "", tanggal: "", harga_normal: "", harga_promo: "", fasilitas: "", status: "ACTIVE", is_active: true };
   const [form, setForm] = useState(emptyForm);
   const STATUS_OPTS = [{ value: "ACTIVE", label: "✓ Aktif", color: "#34d399" }, { value: "UPCOMING", label: "◷ Upcoming", color: "#fbbf24" }, { value: "CLOSED", label: "✕ Tutup", color: "#94a3b8" }];
@@ -685,10 +771,11 @@ function WorkshopsPage() {
     }
     setSaving(false); setAdding(false); setEditing(null); load();
   };
-  const del = async (id: number) => { 
-    if (!confirm("Hapus?")) return; 
-    await fetch(`/api/workshops/${id}`, { method: "DELETE" }); 
+  const del = async () => { 
+    if (!deletingWorkshop) return;
+    await fetch(`/api/workshops/${deletingWorkshop.id}`, { method: "DELETE" }); 
     showToast("Workshop berhasil dihapus!");
+    setDeletingWorkshop(null);
     load(); 
   };
 
@@ -696,13 +783,16 @@ function WorkshopsPage() {
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Workshops</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{workshops.length} workshop terdaftar</p></div>
-        <div style={{ display: "flex", gap: 8 }}><button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button><button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button>}
+        </div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status Event</th><th>Status Aktif</th><th style={{ width: 90 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status Event</th><th>Status Aktif</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
               <tbody>
                 {workshops.map(w => (
                   <tr key={w.id}>
@@ -714,7 +804,14 @@ function WorkshopsPage() {
                     <td style={{ color: "var(--text-muted)", fontSize: 12, maxWidth: 200 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{w.fasilitas ?? "—"}</span></td>
                     <td><span className={`badge ${w.status === "ACTIVE" ? "badge-active" : w.status === "UPCOMING" ? "badge-upcoming" : "badge-closed"}`}>{w.status}</span></td>
                     <td><span className={`badge ${w.is_active ? "badge-active" : "badge-closed"}`}>{w.is_active ? "Aktif" : "Nonaktif"}</span></td>
-                    <td><div style={{ display: "flex", gap: 6 }}><button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(w)}><Icons.Edit /></button><button className="btn btn-danger btn-sm btn-icon" onClick={() => del(w.id)}><Icons.Trash /></button></div></td>
+                    {(canUpdate || canDelete) && (
+                      <td>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(w)}><Icons.Edit /></button>}
+                          {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingWorkshop(w)}><Icons.Trash /></button>}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {workshops.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Belum ada workshop</td></tr>}
@@ -744,16 +841,46 @@ function WorkshopsPage() {
           </div>
         </Modal>
       )}
+
+      {deletingWorkshop && (
+        <Modal title="Hapus Workshop" onClose={() => setDeletingWorkshop(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingWorkshop.nama_workshop}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Tanggal: {fmtDate(deletingWorkshop.tanggal)}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus workshop ini secara permanen?</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={del}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingWorkshop(null)}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesanan: (p: Pesanan) => void }) {
+  const hasAccess = useAccess();
+  const canUpdate = hasAccess("chatbot", "update");
+  const canDelete = hasAccess("chatbot", "delete");
+  const canCreateInvoice = hasAccess("invoice", "create");
   const { showToast } = useToast();
   const [pesanan, setPesanan] = useState<Pesanan[]>([]);
   const [loading, setLoading] = useState(true);
   const [marking, setMarking] = useState<number | null>(null);
   const [confirmPesanan, setConfirmPesanan] = useState<Pesanan | null>(null); // pesanan yang mau diselesaikan
+  const [deletingPesanan, setDeletingPesanan] = useState<Pesanan | null>(null); // pesanan yang mau dihapus
+  const [isDeleting, setIsDeleting] = useState(false);
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan"); setPesanan(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -771,6 +898,20 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
     }
   };
 
+  const doDelete = async () => {
+    if (!deletingPesanan) return;
+    setIsDeleting(true);
+    const res = await fetch(`/api/pesanan/${deletingPesanan.id}`, { method: "DELETE" });
+    setIsDeleting(false);
+    if (res.ok) {
+      showToast(`✅ Pesanan dari "${deletingPesanan.nama}" berhasil dihapus!`);
+      setDeletingPesanan(null);
+      load();
+    } else {
+      showToast("Gagal menghapus pesanan. Coba lagi.", "err");
+    }
+  };
+
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -781,7 +922,7 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th><th style={{ width: 200 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th>{(canUpdate || canCreateInvoice || canDelete) && <th style={{ width: 220 }}>Aksi</th>}</tr></thead>
               <tbody>
                 {pesanan.map(p => (
                   <tr key={p.id}>
@@ -791,23 +932,32 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
                     <td style={{ fontSize: 12, fontFamily: "monospace" }}>{p.no_hp}</td>
                     <td style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 160 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{p.alamat}</span></td>
                     <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(p.created_at)}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button className="btn btn-primary btn-sm" onClick={() => onCreateInvoiceFromPesanan(p)}><Icons.Receipt /> Buat Invoice</button>
-                        <button
-                          className="btn btn-sm"
-                          style={{ background: "rgba(16,185,129,0.15)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}
-                          onClick={() => setConfirmPesanan(p)}
-                          disabled={marking === p.id}
-                          title="Tandai sebagai selesai"
-                        >
-                          {marking === p.id
-                            ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #10b981", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Proses...</>
-                            : <><Icons.Check /> Selesai</>
-                          }
-                        </button>
-                      </div>
-                    </td>
+                    {(canUpdate || canCreateInvoice || canDelete) && (
+                      <td>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {canCreateInvoice && <button className="btn btn-primary btn-sm" onClick={() => onCreateInvoiceFromPesanan(p)}><Icons.Receipt /> Buat Invoice</button>}
+                          {canUpdate && (
+                            <button
+                              className="btn btn-sm"
+                              style={{ background: "rgba(16,185,129,0.15)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}
+                              onClick={() => setConfirmPesanan(p)}
+                              disabled={marking === p.id}
+                              title="Tandai sebagai selesai"
+                            >
+                              {marking === p.id
+                                ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #10b981", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Proses...</>
+                                : <><Icons.Check /> Selesai</>
+                              }
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingPesanan(p)} title="Hapus pesanan">
+                              <Icons.Trash />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {pesanan.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Tidak ada pesanan aktif</td></tr>}
@@ -849,6 +999,43 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
                 <Icons.Check /> Ya, Tandai Selesai
               </button>
               <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setConfirmPesanan(null)}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Konfirmasi Hapus ── */}
+      {deletingPesanan && (
+        <Modal title="Hapus Pesanan" onClose={() => setDeletingPesanan(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Info pesanan */}
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingPesanan.nama}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{deletingPesanan.produk} • {deletingPesanan.no_hp}</p>
+                </div>
+              </div>
+            </div>
+            {/* Pesan konfirmasi */}
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus pesanan ini secara permanen? Data yang dihapus tidak dapat dikembalikan.</span>
+            </div>
+            {/* Tombol aksi */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn btn-sm"
+                style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }}
+                onClick={doDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingPesanan(null)}>
                 Batal
               </button>
             </div>
@@ -981,39 +1168,101 @@ function ChatLogsPage() {
   );
 }
 
+const MODULES = [
+  { id: "produk_ws", label: "Produk & WS", desc: "Katalog Produk, Workshops, Stok & Kuota" },
+  { id: "invoice", label: "Invoice", desc: "Daftar Invoice, Tipe Invoice, Pesanan" },
+  { id: "customer", label: "Customer", desc: "Data Customer, Logbook Pelanggan" },
+  { id: "chatbot", label: "Chatbot", desc: "Knowledge Base, Chat Logs, Riwayat Pesanan" },
+  { id: "pengaturan", label: "Pengaturan", desc: "Profil Toko, Access Control (Kelola Admin)" }
+];
+const ACTIONS = [
+  { id: "read", label: "Read" },
+  { id: "create", label: "Create" },
+  { id: "update", label: "Update" },
+  { id: "delete", label: "Delete" }
+];
+
 function AccessPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("pengaturan", "create");
+  const canUpdate = hasAccess("pengaturan", "update");
+  const canDelete = hasAccess("pengaturan", "delete");
   const { showToast } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ username: "", password: "", role: "admin" });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const [form, setForm] = useState<{username: string; password: string; role: string; permissions: string[]}>({ username: "", password: "", role: "admin", permissions: [] });
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/admin-users"); if (r.ok) setUsers(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
-  const addUser = async () => {
+
+  const saveUser = async () => {
     setSaving(true);
-    await fetch("/api/admin-users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    showToast("Admin User berhasil ditambahkan!");
+    const method = editingId ? "PUT" : "POST";
+    const url = editingId ? `/api/admin-users/${editingId}` : "/api/admin-users";
+    
+    let finalPerms = form.permissions;
+    if (form.role === "admin") {
+      finalPerms = finalPerms.filter(p => p !== "all");
+    }
+    
+    const payload = { ...form, permissions: finalPerms };
+    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    showToast(`Admin User berhasil ${editingId ? "diperbarui" : "ditambahkan"}!`);
     setSaving(false); setAdding(false); load();
   };
-  const del = async (id: number) => { 
-    if (!confirm("Hapus user ini?")) return; 
-    await fetch(`/api/admin-users/${id}`, { method: "DELETE" }); 
+
+  const del = async () => { 
+    if (!deletingUser) return;
+    await fetch(`/api/admin-users/${deletingUser.id}`, { method: "DELETE" }); 
     showToast("Admin User berhasil dihapus!");
+    setDeletingUser(null);
     load(); 
   };
   const ROLE_OPTS = [{ value: "admin", label: "👤 Admin" }, { value: "superadmin", label: "⭐ Superadmin" }];
+  
+  const togglePermission = (perm: string) => {
+    setForm(f => {
+      const perms = f.permissions || [];
+      if (perms.includes(perm)) return { ...f, permissions: perms.filter(p => p !== perm) };
+      return { ...f, permissions: [...perms, perm] };
+    });
+  };
+
+  const openAdd = () => {
+    setForm({ username: "", password: "", role: "admin", permissions: [] });
+    setEditingId(null);
+    setAdding(true);
+  };
+
+  const openEdit = (u: any) => {
+    let perms: string[] = [];
+    if (Array.isArray(u.permissions)) perms = u.permissions;
+    else if (typeof u.permissions === "string") {
+      try { perms = JSON.parse(u.permissions); } catch { perms = []; }
+    }
+    if (u.role === "admin") perms = perms.filter(p => p !== "all");
+    
+    setForm({ username: u.username, password: "", role: u.role, permissions: perms });
+    setEditingId(u.id);
+    setAdding(true);
+  };
+
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Access Control</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola akun admin panel</p></div>
-        <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}><Icons.Plus /> Tambah User</button>
+        {canCreate && (
+          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah User</button>
+        )}
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Dibuat</th><th style={{ width: 70 }}>Aksi</th></tr></thead>
+              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Dibuat</th><th style={{ width: 100 }}>Aksi</th></tr></thead>
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
@@ -1021,7 +1270,14 @@ function AccessPage() {
                     <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{u.username}</td>
                     <td><span className={`badge ${u.role === "superadmin" ? "badge-ai" : "badge-form"}`}>{u.role === "superadmin" ? "⭐ Superadmin" : "👤 Admin"}</span></td>
                     <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{fmtDate(u.created_at)}</td>
-                    <td>{u.role !== "superadmin" && <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(u.id)}><Icons.Trash /></button>}</td>
+                    <td>
+                      {u.role !== "superadmin" && (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(u)}><span style={{ fontSize: 14 }}>✏️</span></button>}
+                          {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingUser(u)}><Icons.Trash /></button>}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {users.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Tidak ada data</td></tr>}
@@ -1031,12 +1287,81 @@ function AccessPage() {
         )}
       </div>
       {adding && (
-        <Modal title="Tambah Admin User" onClose={() => setAdding(false)}>
+        <Modal title={editingId ? "Edit Admin User" : "Tambah Admin User"} onClose={() => setAdding(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Username" required><input className="input" placeholder="username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></Field>
-            <Field label="Password" required><input className="input" type="password" placeholder="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
+            <Field label="Username" required><input className="input" placeholder="username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} disabled={!!editingId} style={editingId ? { opacity: 0.6 } : {}} /></Field>
+            <Field label="Password" required={!editingId}><input className="input" type="password" placeholder={editingId ? "(Kosongkan jika tak ubah sandi)" : "password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></Field>
             <Field label="Role"><CustomSelect value={form.role} onChange={v => setForm(f => ({ ...f, role: v }))} options={ROLE_OPTS} /></Field>
-            <div style={{ display: "flex", gap: 8 }}><button className="btn btn-primary" style={{ flex: 1 }} onClick={addUser} disabled={saving}><Icons.Save /> {saving ? "..." : "Tambah"}</button><button className="btn btn-secondary" onClick={() => setAdding(false)}>Batal</button></div>
+            
+            {form.role === "admin" && (
+              <div style={{ marginTop: 10 }}>
+                <label className="field-label" style={{ marginBottom: 12, display: "block" }}>Permissions (Akses Modul)</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-card)", padding: 12, borderRadius: 8, border: "1px solid var(--border)" }}>
+                  {MODULES.map(m => {
+                    const isAllChecked = ACTIONS.every(a => form.permissions.includes(`${m.id}:${a.id}`));
+                    return (
+                      <div key={m.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", borderBottom: "1px dashed var(--border)", paddingBottom: 10, paddingTop: 10 }}>
+                        <div style={{ display: "flex", flexDirection: "column", width: 150 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{m.label}</span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.3 }}>{m.desc}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center", paddingTop: 4 }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-primary)", fontWeight: 600, marginRight: 8 }}>
+                            <input type="checkbox" checked={isAllChecked} onChange={e => {
+                              const checked = e.target.checked;
+                              setForm(f => {
+                                let perms = f.permissions || [];
+                                const modPerms = ACTIONS.map(a => `${m.id}:${a.id}`);
+                                if (checked) perms = [...perms, ...modPerms.filter(p => !perms.includes(p))];
+                                else perms = perms.filter(p => !modPerms.includes(p));
+                                return { ...f, permissions: perms };
+                              });
+                            }} style={{ accentColor: "var(--primary)" }} />
+                            All
+                          </label>
+                          {ACTIONS.map(a => {
+                            const p = `${m.id}:${a.id}`;
+                            const isChecked = form.permissions.includes(p);
+                            return (
+                              <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13, color: "var(--text-secondary)" }}>
+                                <input type="checkbox" checked={isChecked} onChange={() => togglePermission(p)} style={{ accentColor: "var(--primary)" }} />
+                                {a.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}><button className="btn btn-primary" style={{ flex: 1 }} onClick={saveUser} disabled={saving}><Icons.Save /> {saving ? "..." : "Simpan"}</button><button className="btn btn-secondary" onClick={() => setAdding(false)}>Batal</button></div>
+          </div>
+        </Modal>
+      )}
+
+      {deletingUser && (
+        <Modal title="Hapus Admin User" onClose={() => setDeletingUser(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🗑️</span>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>{deletingUser.username}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Role: {deletingUser.role}</p>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 13, color: "#f59e0b", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <span>Anda yakin ingin menghapus akun admin ini? Tindakan ini tidak dapat dibatalkan.</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: "center", background: "linear-gradient(135deg,rgba(239,68,68,0.2),rgba(220,38,38,0.15))", color: "#ef4444", border: "1px solid rgba(239,68,68,0.4)", padding: "10px 0", fontWeight: 700 }} onClick={del}>Ya, Hapus</button>
+              <button className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "10px 0" }} onClick={() => setDeletingUser(null)}>Batal</button>
+            </div>
           </div>
         </Modal>
       )}
@@ -1045,7 +1370,7 @@ function AccessPage() {
 }
 
 // ─── Login Page ────────────────────────────────────────────────────────────────
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function LoginPage({ onLogin }: { onLogin: (data: any) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1056,7 +1381,10 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setLoading(true); setError("");
     const r = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
-    if (r.ok) onLogin();
+    if (r.ok) {
+      const d = await r.json();
+      onLogin(d);
+    }
     else { const d = await r.json(); setError(d.error ?? "Login gagal"); }
     setLoading(false);
   };
@@ -1380,15 +1708,46 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [userRole, setUserRole] = useState("admin");
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [userName, setUserName] = useState("Admin");
 
   useEffect(() => {
     const check = async () => {
       const r = await fetch("/api/auth");
-      setIsLoggedIn(r.ok);
+      if (r.ok) {
+        const data = await r.json();
+        setIsLoggedIn(true);
+        setUserRole(data.role);
+        setUserName(data.username || "Admin");
+        
+        let perms: string[] = [];
+        if (Array.isArray(data.permissions)) perms = data.permissions;
+        else if (typeof data.permissions === "string") {
+          try { perms = JSON.parse(data.permissions); } catch { perms = []; }
+        }
+        setUserPermissions(perms);
+        
+        if (data.role !== "superadmin" && !perms.includes("all")) {
+          if (perms.some((p: string) => p.startsWith("produk_ws:"))) setCurrentPage("katalog");
+          else if (perms.some((p: string) => p.startsWith("invoice:"))) setCurrentPage("invoice-list");
+          else if (perms.some((p: string) => p.startsWith("customer:"))) setCurrentPage("customers");
+          else if (perms.some((p: string) => p.startsWith("chatbot:"))) setCurrentPage("ai-assistant");
+          else if (perms.some((p: string) => p.startsWith("pengaturan:"))) setCurrentPage("company");
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
       setCheckingAuth(false);
     };
     check();
   }, []);
+
+  const hasAccess = (moduleName: string, action = "read") => {
+    if (userRole === "superadmin") return true;
+    if (userPermissions.includes("all")) return true;
+    return userPermissions.includes(`${moduleName}:${action}`);
+  };
 
   useEffect(() => {
     if (darkMode) document.documentElement.classList.remove("light");
@@ -1426,7 +1785,26 @@ export default function AdminPage() {
     </div>
   );
 
-  if (!isLoggedIn) return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  if (!isLoggedIn) return <LoginPage onLogin={(d) => {
+    setIsLoggedIn(true);
+    setUserRole(d.role);
+    setUserName(d.username || "Admin");
+    
+    let perms: string[] = [];
+    if (Array.isArray(d.permissions)) perms = d.permissions;
+    else if (typeof d.permissions === "string") {
+      try { perms = JSON.parse(d.permissions); } catch { perms = []; }
+    }
+    setUserPermissions(perms);
+    
+    if (d.role !== "superadmin" && !perms.includes("all")) {
+      if (perms.some((p: string) => p.startsWith("produk_ws:"))) setCurrentPage("katalog");
+      else if (perms.some((p: string) => p.startsWith("invoice:"))) setCurrentPage("invoice-list");
+      else if (perms.some((p: string) => p.startsWith("customer:"))) setCurrentPage("customers");
+      else if (perms.some((p: string) => p.startsWith("chatbot:"))) setCurrentPage("ai-assistant");
+      else if (perms.some((p: string) => p.startsWith("pengaturan:"))) setCurrentPage("company");
+    }
+  }} />;
 
   const PAGE_TITLES: Record<Page, string> = {
     dashboard: "Dashboard", katalog: "Katalog Produk", stok: "Stok & Kuota",
@@ -1489,7 +1867,15 @@ export default function AdminPage() {
 
         {/* Nav */}
         <nav className="sidebar-nav">
-          {NAV_GROUPS.map((group) => (
+          {NAV_GROUPS.filter(group => {
+            if (group.key === "MENU" || group.key === "EXTRA") return true;
+            if (group.key === "PRODUK & WS") return hasAccess("produk_ws");
+            if (group.key === "INVOICE") return hasAccess("invoice");
+            if (group.key === "CUSTOMER") return hasAccess("customer");
+            if (group.key === "CHATBOT") return hasAccess("chatbot");
+            if (group.key === "PENGATURAN") return hasAccess("pengaturan");
+            return true;
+          }).map((group) => (
             <SidebarGroup
               key={group.key}
               group={group}
@@ -1527,13 +1913,18 @@ export default function AdminPage() {
             <NotifBell notifs={notifs} setNotifs={setNotifs} notifOpen={notifOpen} setNotifOpen={setNotifOpen} onNavigate={handleNavigate} />
 
             <div style={{ width: 1, height: 20, background: "var(--border)", margin: "0 2px" }} />
-            <div style={{ padding: "4px 12px", borderRadius: 6, background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.25)", fontSize: 12, color: "#38bdf8", fontWeight: 600 }}>superadmin</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{userName}</span>
+              <div style={{ padding: "4px 10px", borderRadius: 6, background: userRole === "superadmin" ? "rgba(56,189,248,0.12)" : "rgba(167,139,250,0.12)", border: userRole === "superadmin" ? "1px solid rgba(56,189,248,0.25)" : "1px solid rgba(167,139,250,0.25)", fontSize: 11, color: userRole === "superadmin" ? "#38bdf8" : "#a78bfa", fontWeight: 700, textTransform: "uppercase" }}>{userRole}</div>
+            </div>
           </div>
         </div>
 
         {/* Page content */}
         <main className="page-content">
-          {renderPage()}
+          <AccessContext.Provider value={hasAccess}>
+            {renderPage()}
+          </AccessContext.Provider>
         </main>
       </div>
 

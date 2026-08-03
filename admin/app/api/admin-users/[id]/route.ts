@@ -8,7 +8,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
 
-  const updatePayload: Record<string, string> = { role: body.role };
+  const updatePayload: Record<string, any> = { role: body.role };
+  
+  if (body.permissions !== undefined) {
+    updatePayload.permissions = body.permissions;
+  }
 
   // Jika ada password baru, hash dulu
   if (body.password) {
@@ -19,7 +23,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     .from("admin_users")
     .update(updatePayload)
     .eq("id", id)
-    .select("id, username, role, created_at")
+    .select("id, username, role, created_at, permissions")
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });

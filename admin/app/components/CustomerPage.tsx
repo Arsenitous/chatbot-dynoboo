@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { Customer } from "@/lib/supabase";
 import { Icons, Modal, Field, useToast } from "./ui";
+import { useAccess } from "./AccessContext";
 
 type CustomerForm = {
   nama: string;
@@ -22,6 +23,10 @@ const emptyForm: CustomerForm = {
 };
 
 export default function CustomerPage() {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("customer", "create");
+  const canUpdate = hasAccess("customer", "update");
+  const canDelete = hasAccess("customer", "delete");
   const { showToast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,9 +134,11 @@ export default function CustomerPage() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}>
-            <Icons.UserPlus /> Tambah Customer
-          </button>
+          {canCreate && (
+            <button className="btn btn-primary btn-sm" onClick={openAdd}>
+              <Icons.UserPlus /> Tambah Customer
+            </button>
+          )}
         </div>
       </div>
 
@@ -182,7 +189,7 @@ export default function CustomerPage() {
                   <th>Email</th>
                   <th>Alamat</th>
                   <th style={{ width: 80 }}>Status</th>
-                  <th style={{ width: 100, textAlign: "center" }}>Aksi</th>
+                  {(canUpdate || canDelete) && <th style={{ width: 100, textAlign: "center" }}>Aksi</th>}
                 </tr>
               </thead>
               <tbody>
@@ -241,16 +248,22 @@ export default function CustomerPage() {
                         {c.is_active ? "Aktif" : "Nonaktif"}
                       </span>
                     </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Edit" onClick={() => openEdit(c)}>
-                          <Icons.Edit />
-                        </button>
-                        <button className="btn btn-danger btn-sm btn-icon" title="Hapus" onClick={() => setDeleteTarget(c)}>
-                          <Icons.Trash />
-                        </button>
-                      </div>
-                    </td>
+                    {(canUpdate || canDelete) && (
+                      <td>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          {canUpdate && (
+                            <button className="btn btn-secondary btn-sm btn-icon" title="Edit" onClick={() => openEdit(c)}>
+                              <Icons.Edit />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button className="btn btn-danger btn-sm btn-icon" title="Hapus" onClick={() => setDeleteTarget(c)}>
+                              <Icons.Trash />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

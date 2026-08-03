@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { Invoice, InvoiceType } from "@/lib/supabase";
 import { Icons, CustomSelect, InvoiceStatusBadge, fmtRp, Modal, Field, useToast } from "./ui";
+import { useAccess } from "./AccessContext";
 
 type Props = {
   onViewInvoice: (id: number) => void;
@@ -33,6 +34,10 @@ const MONTH_OPTIONS = [
 ];
 
 export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Props) {
+  const hasAccess = useAccess();
+  const canCreate = hasAccess("invoice", "create");
+  const canUpdate = hasAccess("invoice", "update");
+  const canDelete = hasAccess("invoice", "delete");
   const { showToast } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [types, setTypes] = useState<InvoiceType[]>([]);
@@ -272,7 +277,9 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowReportModal(true)}><Icons.Printer /> Laporan PDF</button>
           <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
-          <button className="btn btn-primary btn-sm" onClick={onCreateInvoice}><Icons.Plus /> Buat Invoice</button>
+          {canCreate && (
+            <button className="btn btn-primary btn-sm" onClick={onCreateInvoice}><Icons.Plus /> Buat Invoice</button>
+          )}
         </div>
       </div>
 
@@ -351,23 +358,27 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
                         <Icons.Eye />
                       </button>
                       {inv.status_pembayaran !== "CANCELLED" ? (
-                        <button
-                          className="btn btn-sm btn-icon"
-                          style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
-                          title="Batalkan Invoice"
-                          onClick={() => setTargetCancelInvoice(inv)}
-                        >
-                          <Icons.X />
-                        </button>
+                        canDelete && (
+                          <button
+                            className="btn btn-sm btn-icon"
+                            style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
+                            title="Batalkan Invoice"
+                            onClick={() => setTargetCancelInvoice(inv)}
+                          >
+                            <Icons.X />
+                          </button>
+                        )
                       ) : (
-                        <button
-                          className="btn btn-sm btn-icon"
-                          style={{ background: "rgba(16,185,129,0.12)", color: "#34d399", border: "1px solid rgba(16,185,129,0.3)" }}
-                          title="Pulihkan Invoice"
-                          onClick={() => doRestoreInvoice(inv)}
-                        >
-                          <Icons.Refresh />
-                        </button>
+                        canUpdate && (
+                          <button
+                            className="btn btn-sm btn-icon"
+                            style={{ background: "rgba(16,185,129,0.12)", color: "#34d399", border: "1px solid rgba(16,185,129,0.3)" }}
+                            title="Pulihkan Invoice"
+                            onClick={() => doRestoreInvoice(inv)}
+                          >
+                            <Icons.Refresh />
+                          </button>
+                        )
                       )}
                     </div>
                   </td>
