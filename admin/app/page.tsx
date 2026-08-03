@@ -1714,7 +1714,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const check = async () => {
-      const r = await fetch("/api/auth");
+      const r = await fetch("/api/auth", { cache: "no-store" });
       if (r.ok) {
         const data = await r.json();
         setIsLoggedIn(true);

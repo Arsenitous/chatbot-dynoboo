@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+export const dynamic = "force-dynamic";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
 import { verifyPassword } from "@/lib/auth";
