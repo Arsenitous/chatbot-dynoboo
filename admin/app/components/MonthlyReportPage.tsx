@@ -5,7 +5,7 @@ import { Icons, fmtRp } from "./ui";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type Props = {
-  onNavigate: (page: string, data?: unknown) => void;
+  onNavigate: (page: any, data?: unknown) => void;
 };
 
 type SummaryData = {
