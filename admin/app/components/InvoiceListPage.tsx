@@ -142,7 +142,7 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initia
   };
 
   const handleGenerateReport = () => {
-    let reportList = [...invoices];
+    let reportList = invoices.filter(inv => inv.status_pembayaran !== "CANCELLED");
     let filterTitle = "Semua Periode (All)";
 
     if (reportMode === "MONTHLY") {
