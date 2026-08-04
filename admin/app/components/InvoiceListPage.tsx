@@ -333,7 +333,7 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initia
       {/* Filters */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", display: "flex", alignItems: "center" }}><Icons.Search /></span>
           <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari no invoice atau nama customer..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={{ width: 140 }}><CustomSelect value={filterMonth} onChange={setFilterMonth} options={[{value: "", label: "Bulan (Semua)"}, ...MONTH_OPTIONS]} /></div>
