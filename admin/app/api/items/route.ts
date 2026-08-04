@@ -18,9 +18,11 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const user = cookieStore.get("dynoboo_user")?.value ?? "superadmin";
 
+  const { qty_available, ...itemBody } = body;
+
   const { data, error } = await supabase
     .from("items")
-    .insert(body)
+    .insert(itemBody)
     .select("*, item_type:item_types(*)")
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
