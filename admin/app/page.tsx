@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import type { KnowledgeBase, Workshop, Pesanan, ChatLog, PilihanJawaban, AdminUser, Invoice, Item } from "@/lib/supabase";
 
 // ─── Import components ────────────────────────────────────────────────────────
-import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp, ToastProvider, useToast } from "./components/ui";
+import { Icons, CustomSelect, Modal, StatCard, Field, InvoiceStatusBadge, fmtRp, ToastProvider, useToast, SortIcon } from "./components/ui";
+import { useSort } from "@/lib/useSort";
 import KatalogPage from "./components/KatalogPage";
 import StokPage from "./components/StokPage";
 import InvoiceListPage from "./components/InvoiceListPage";
@@ -14,7 +15,7 @@ import InvoiceFormPage from "./components/InvoiceFormPage";
 import InvoiceDetailPage from "./components/InvoiceDetailPage";
 import CompanyPage from "./components/CompanyPage";
 import AiAssistantPage from "./components/AiAssistantPage";
-import CustomerPage from "./components/CustomerPage";
+import LoyaltyPage from "./components/LoyaltyPage";
 import { AccessContext, useAccess } from "./components/AccessContext";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -22,7 +23,7 @@ type Page =
   | "dashboard"
   | "katalog" | "stok"
   | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
-  | "customers"
+  | "loyalty"
   | "knowledge" | "workshops" | "pesanan" | "riwayat-pesanan" | "chatlogs"
   | "company" | "access" | "ai-assistant" | "manual";
 
@@ -31,19 +32,6 @@ const NAV_GROUPS = [
   {
     key: "MENU",
     items: [{ id: "dashboard", label: "Dashboard", icon: <Icons.Dashboard /> }],
-  },
-  {
-    key: "PRODUK & WS",
-    sub: [
-      { 
-        label: "Master", 
-        items: [
-          { id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> },
-          { id: "workshops", label: "Workshops", icon: <Icons.Workshop /> }
-        ] 
-      },
-      { label: "Stok", items: [{ id: "stok", label: "Stok & Kuota", icon: <Icons.BarChart /> }] },
-    ],
   },
   {
     key: "INVOICE",
@@ -62,9 +50,22 @@ const NAV_GROUPS = [
     ],
   },
   {
-    key: "CUSTOMER",
+    key: "PRODUK & WS",
+    sub: [
+      { 
+        label: "Master", 
+        items: [
+          { id: "katalog", label: "Katalog Produk", icon: <Icons.Package /> },
+          { id: "workshops", label: "Workshops", icon: <Icons.Workshop /> }
+        ] 
+      },
+      { label: "Stok", items: [{ id: "stok", label: "Stok & Kuota", icon: <Icons.BarChart /> }] },
+    ],
+  },
+  {
+    key: "LOYALTY",
     items: [
-      { id: "customers", label: "Customer Logbook", icon: <Icons.Users /> },
+      { id: "loyalty", label: "Loyalty Logbook", icon: <Icons.Users /> },
     ],
   },
   {
@@ -107,7 +108,7 @@ const GROUP_META: Record<string, { color: string; bg: string; emoji: string }> =
   MENU:          { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🏠" },
   "PRODUK & WS": { color: "#a78bfa", bg: "rgba(167,139,250,0.18)", emoji: "📦" },
   INVOICE:       { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "🧾" },
-  CUSTOMER:      { color: "#fb7185", bg: "rgba(251,113,133,0.18)", emoji: "👥" },
+  LOYALTY:      { color: "#fb7185", bg: "rgba(251,113,133,0.18)", emoji: "👥" },
   CHATBOT:       { color: "#34d399", bg: "rgba(52,211,153,0.18)",  emoji: "🤖" },
   PENGATURAN:    { color: "#f59e0b", bg: "rgba(245,158,11,0.18)",  emoji: "⚙️" },
   EXTRA:         { color: "#38bdf8", bg: "rgba(56,189,248,0.18)",  emoji: "📌" },
@@ -261,9 +262,13 @@ function InvoiceTypesPage() {
   const [editing, setEditing] = useState<InvoiceTypeRow | null>(null);
   const [form, setForm] = useState({ nama: "", prefix: "", deskripsi: "", is_active: true });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
   const [deletingType, setDeletingType] = useState<InvoiceTypeRow | null>(null);
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/invoice-types"); setTypes(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
+  
+  const filteredTypes = types.filter(t => t.nama.toLowerCase().includes(search.toLowerCase()) || t.prefix.toLowerCase().includes(search.toLowerCase()) || (t.deskripsi || "").toLowerCase().includes(search.toLowerCase()));
+  const { sortedItems: sortedTypes, handleSort, sortConfig } = useSort(filteredTypes);
   const openAdd = () => { setForm({ nama: "", prefix: "", deskripsi: "", is_active: true }); setAdding(true); setEditing(null); };
   const openEdit = (t: InvoiceTypeRow) => { setForm({ nama: t.nama, prefix: t.prefix, deskripsi: t.deskripsi ?? "", is_active: t.is_active }); setEditing(t); setAdding(false); };
   const save = async () => {
@@ -285,16 +290,32 @@ function InvoiceTypesPage() {
   };
   return (
     <div className="animate-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Tipe Invoice</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola template jenis invoice (Workshop, Produk, Bouquet...)</p></div>
-        {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Tipe</button>}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}><Icons.Search /></span>
+            <input className="input" style={{ paddingLeft: 34, width: 220, height: 34, fontSize: 13 }} placeholder="Cari tipe..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Tipe</button>}
+        </div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
           <table className="data-table">
-            <thead><tr><th>Nama</th><th>Prefix</th><th>Deskripsi</th><th>Contoh No.</th><th>Status</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
+            <thead>
+              <tr>
+                <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("nama")}>Nama <SortIcon sortConfig={sortConfig} columnKey="nama" /></th>
+                <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("prefix")}>Prefix <SortIcon sortConfig={sortConfig} columnKey="prefix" /></th>
+                <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("deskripsi")}>Deskripsi <SortIcon sortConfig={sortConfig} columnKey="deskripsi" /></th>
+                <th>Contoh No.</th>
+                <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("is_active")}>Status <SortIcon sortConfig={sortConfig} columnKey="is_active" /></th>
+                {(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}
+              </tr>
+            </thead>
             <tbody>
-              {types.map(t => (
+              {sortedTypes.map(t => (
                 <tr key={t.id}>
                   <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{t.nama}</td>
                   <td><code style={{ background: "rgba(56,189,248,0.12)", padding: "2px 8px", borderRadius: 4, color: "#38bdf8", fontSize: 12 }}>{t.prefix}</code></td>
@@ -393,6 +414,9 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown
 
   const lowStockItems = items.filter(i => i.is_active && (i.stock?.qty_available ?? 0) <= 3);
 
+  const recentInvoices = invoices.slice(0, 5);
+  const { sortedItems: sortedRecentInvoices, handleSort: handleSortRecent, sortConfig: sortConfigRecent } = useSort(recentInvoices);
+
   return (
     <div className="animate-in">
       {/* Header */}
@@ -455,15 +479,15 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>No Invoice</th>
-                      <th>Customer</th>
-                      <th>Total</th>
-                      <th>Status</th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSortRecent("invoice_no")}>No Invoice <SortIcon sortConfig={sortConfigRecent} columnKey="invoice_no" /></th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSortRecent("customer_name")}>Customer <SortIcon sortConfig={sortConfigRecent} columnKey="customer_name" /></th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSortRecent("grand_total")}>Total <SortIcon sortConfig={sortConfigRecent} columnKey="grand_total" /></th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSortRecent("status_pembayaran")}>Status <SortIcon sortConfig={sortConfigRecent} columnKey="status_pembayaran" /></th>
                       <th style={{ width: 60 }}>Lihat</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.slice(0, 5).map(inv => (
+                    {sortedRecentInvoices.map(inv => (
                       <tr key={inv.id} style={{ cursor: "pointer" }} onClick={() => onNavigate("invoice-list")}>
                         <td><span style={{ fontFamily: "monospace", fontSize: 11, color: "#38bdf8", fontWeight: 600 }}>{inv.invoice_no}</span></td>
                         <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{inv.customer_name}</td>
@@ -642,6 +666,7 @@ function KnowledgePage() {
   const removeChoice = (i: number) => setForm(f => ({ ...f, pilihan_jawaban: f.pilihan_jawaban.filter((_, idx) => idx !== i) }));
 
   const filtered = knowledges.filter(k => !search || k.keywords.toLowerCase().includes(search.toLowerCase()) || k.jawaban_utama.toLowerCase().includes(search.toLowerCase()));
+  const { sortedItems: sortedFiltered, handleSort, sortConfig } = useSort(filtered);
 
   return (
     <div className="animate-in">
@@ -660,9 +685,18 @@ function KnowledgePage() {
         {loading ? <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Keywords</th><th>Jawaban Utama</th><th>Pilihan</th><th>Catatan</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("keywords")}>Keywords <SortIcon sortConfig={sortConfig} columnKey="keywords" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("jawaban_utama")}>Jawaban Utama <SortIcon sortConfig={sortConfig} columnKey="jawaban_utama" /></th>
+                  <th>Pilihan</th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("keterangan")}>Catatan <SortIcon sortConfig={sortConfig} columnKey="keterangan" /></th>
+                  {(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}
+                </tr>
+              </thead>
               <tbody>
-                {filtered.map(k => (
+                {sortedFiltered.map(k => (
                   <tr key={k.id}>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{k.id}</td>
                     <td><div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{k.keywords.split(",").map(kw => <span key={kw} className="badge badge-form" style={{ fontSize: 10 }}>{kw.trim()}</span>)}</div></td>
@@ -747,6 +781,8 @@ function WorkshopsPage() {
   const { showToast } = useToast();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [editing, setEditing] = useState<Workshop | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -779,22 +815,91 @@ function WorkshopsPage() {
     load(); 
   };
 
+  const filteredWorkshops = workshops.filter(w => {
+    const matchesSearch = w.nama_workshop.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = filterStatus === "ALL" ? true : filterStatus === "ACTIVE" ? w.is_active : !w.is_active;
+    return matchesSearch && matchesStatus;
+  });
+  const { sortedItems: sortedWorkshops, handleSort, sortConfig } = useSort(filteredWorkshops);
+
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Workshops</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{workshops.length} workshop terdaftar</p></div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
-          {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah</button>}
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /> Refresh</button>
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah Workshop</button>}
+        </div>
+      </div>
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+        {[
+          { id: "ALL", label: "Total Workshop", val: workshops.length, color: "#38bdf8", bg: "rgba(56,189,248,0.12)" },
+          { id: "ACTIVE", label: "Aktif", val: workshops.filter(c => c.is_active).length, color: "#34d399", bg: "rgba(52,211,153,0.12)" },
+          { id: "INACTIVE", label: "Non-aktif", val: workshops.filter(c => !c.is_active).length, color: "#f87171", bg: "rgba(239,68,68,0.12)" },
+        ].map(s => {
+          const isActive = filterStatus === s.id;
+          return (
+            <div
+              key={s.id}
+              className="card"
+              style={{
+                padding: "14px 16px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                border: isActive ? `1.5px solid ${s.color}` : "1px solid var(--border)",
+                boxShadow: isActive ? `0 0 16px ${s.color}30` : "none",
+                background: isActive ? `${s.color}10` : "var(--bg-card)",
+              }}
+              onClick={() => setFilterStatus(s.id as any)}
+              title={`Klik untuk memfilter: ${s.label}`}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.val}</p>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${s.color}20`, color: s.color }}>
+                  {isActive ? "Aktif" : "Lihat →"}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{s.label}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <div style={{ position: "relative", flex: 1 }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
+            <Icons.Search />
+          </span>
+          <input
+            className="input"
+            style={{ paddingLeft: 36, width: "100%", height: 38 }}
+            placeholder="Cari nama workshop..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama Workshop</th><th>Tanggal</th><th>Harga Normal</th><th>Harga Promo</th><th>Fasilitas</th><th>Status Event</th><th>Status Aktif</th>{(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}</tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("nama_workshop")}>Nama Workshop <SortIcon sortConfig={sortConfig} columnKey="nama_workshop" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("tanggal")}>Tanggal <SortIcon sortConfig={sortConfig} columnKey="tanggal" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("harga_normal")}>Harga Normal <SortIcon sortConfig={sortConfig} columnKey="harga_normal" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("harga_promo")}>Harga Promo <SortIcon sortConfig={sortConfig} columnKey="harga_promo" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("fasilitas")}>Fasilitas <SortIcon sortConfig={sortConfig} columnKey="fasilitas" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("status_event")}>Status Event <SortIcon sortConfig={sortConfig} columnKey="status_event" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("is_active")}>Status Aktif <SortIcon sortConfig={sortConfig} columnKey="is_active" /></th>
+                  {(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}
+                </tr>
+              </thead>
               <tbody>
-                {workshops.map(w => (
+                {sortedWorkshops.map(w => (
                   <tr key={w.id}>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{w.id}</td>
                     <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{w.nama_workshop}</td>
@@ -877,12 +982,15 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
   const { showToast } = useToast();
   const [pesanan, setPesanan] = useState<Pesanan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const [marking, setMarking] = useState<number | null>(null);
   const [confirmPesanan, setConfirmPesanan] = useState<Pesanan | null>(null); // pesanan yang mau diselesaikan
   const [deletingPesanan, setDeletingPesanan] = useState<Pesanan | null>(null); // pesanan yang mau dihapus
   const [isDeleting, setIsDeleting] = useState(false);
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan"); setPesanan(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
+  const filteredPesanan = pesanan.filter(p => p.nama.toLowerCase().includes(search.toLowerCase()) || (p.no_hp || "").includes(search) || (p.produk || "").toLowerCase().includes(search.toLowerCase()));
+  const { sortedItems: sortedPesanan, handleSort, sortConfig } = useSort(filteredPesanan);
 
   const doMarkSelesai = async () => {
     if (!confirmPesanan) return;
@@ -914,17 +1022,33 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
 
   return (
     <div className="animate-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Pesanan (Pre-order)</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Dari chatbot Instagram — klik "Buat Invoice" untuk memproses, atau "Selesai" jika sudah ditangani</p></div>
-        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}><Icons.Search /></span>
+            <input className="input" style={{ paddingLeft: 34, width: 220, height: 34, fontSize: 13 }} placeholder="Cari nama, HP, produk..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+        </div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Nama</th><th>Produk</th><th>No HP</th><th>Alamat</th><th>Waktu</th>{(canUpdate || canCreateInvoice || canDelete) && <th style={{ width: 220 }}>Aksi</th>}</tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("nama")}>Nama <SortIcon sortConfig={sortConfig} columnKey="nama" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("produk")}>Produk <SortIcon sortConfig={sortConfig} columnKey="produk" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("no_hp")}>No HP <SortIcon sortConfig={sortConfig} columnKey="no_hp" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("alamat")}>Alamat <SortIcon sortConfig={sortConfig} columnKey="alamat" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("created_at")}>Waktu <SortIcon sortConfig={sortConfig} columnKey="created_at" /></th>
+                  {(canUpdate || canCreateInvoice || canDelete) && <th style={{ width: 220 }}>Aksi</th>}
+                </tr>
+              </thead>
               <tbody>
-                {pesanan.map(p => (
+                {sortedPesanan.map(p => (
                   <tr key={p.id}>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{p.id}</td>
                     <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.nama}</td>
@@ -1050,17 +1174,26 @@ function PesananPage({ onCreateInvoiceFromPesanan }: { onCreateInvoiceFromPesana
 function RiwayatPesananPage() {
   const [riwayat, setRiwayat] = useState<Pesanan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/pesanan/riwayat"); setRiwayat(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
+  const filteredRiwayat = riwayat.filter(p => p.nama.toLowerCase().includes(search.toLowerCase()) || (p.no_hp || "").includes(search) || (p.produk || "").toLowerCase().includes(search.toLowerCase()));
+  const { sortedItems: sortedRiwayat, handleSort, sortConfig } = useSort(filteredRiwayat);
 
   return (
     <div className="animate-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Riwayat Pesanan</h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Pesanan yang sudah selesai ditangani</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}><Icons.Search /></span>
+            <input className="input" style={{ paddingLeft: 34, width: 220, height: 34, fontSize: 13 }} placeholder="Cari nama, HP, produk..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+        </div>
       </div>
 
       <div className="card" style={{ overflow: "hidden" }}>
@@ -1069,18 +1202,18 @@ function RiwayatPesananPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Nama</th>
-                  <th>Produk</th>
-                  <th>No HP</th>
-                  <th>Alamat</th>
-                  <th>Pesanan Masuk</th>
-                  <th>Diselesaikan</th>
-                  <th>Oleh</th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("nama")}>Nama <SortIcon sortConfig={sortConfig} columnKey="nama" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("produk")}>Produk <SortIcon sortConfig={sortConfig} columnKey="produk" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("no_hp")}>No HP <SortIcon sortConfig={sortConfig} columnKey="no_hp" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("alamat")}>Alamat <SortIcon sortConfig={sortConfig} columnKey="alamat" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("created_at")}>Pesanan Masuk <SortIcon sortConfig={sortConfig} columnKey="created_at" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("selesai_at")}>Diselesaikan <SortIcon sortConfig={sortConfig} columnKey="selesai_at" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("diselesaikan_oleh")}>Oleh <SortIcon sortConfig={sortConfig} columnKey="diselesaikan_oleh" /></th>
                 </tr>
               </thead>
               <tbody>
-                {riwayat.map(p => (
+                {sortedRiwayat.map(p => (
                   <tr key={p.id}>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{p.id}</td>
                     <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.nama}</td>
@@ -1124,6 +1257,7 @@ function ChatLogsPage() {
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/chat-logs"); setLogs(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
   const filtered = logs.filter(l => !search || l.user_message.toLowerCase().includes(search.toLowerCase()) || l.sender_id.includes(search));
+  const { sortedItems: sortedLogs, handleSort, sortConfig } = useSort(filtered);
   return (
     <div className="animate-in">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -1138,9 +1272,17 @@ function ChatLogsPage() {
         {loading ? <div style={{ padding: 20 }}>{[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8 }} />)}</div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>Sender</th><th>Pesan User</th><th>Intent</th><th>Waktu</th><th style={{ width: 60 }}>Detail</th></tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("sender_id")}>Sender <SortIcon sortConfig={sortConfig} columnKey="sender_id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("user_message")}>Pesan User <SortIcon sortConfig={sortConfig} columnKey="user_message" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("intent")}>Intent <SortIcon sortConfig={sortConfig} columnKey="intent" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("created_at")}>Waktu <SortIcon sortConfig={sortConfig} columnKey="created_at" /></th>
+                  <th style={{ width: 60 }}>Detail</th>
+                </tr>
+              </thead>
               <tbody>
-                {filtered.map(l => (
+                {sortedLogs.map(l => (
                   <tr key={l.id}>
                     <td><code style={{ fontSize: 11, color: "#22d3ee" }}>{l.sender_id.slice(0, 16)}...</code></td>
                     <td style={{ maxWidth: 280, fontSize: 13 }}><span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{l.user_message}</span></td>
@@ -1195,8 +1337,11 @@ function AccessPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
   const [form, setForm] = useState<{username: string; password: string; role: string; permissions: string[]}>({ username: "", password: "", role: "admin", permissions: [] });
+  const [search, setSearch] = useState("");
   const load = useCallback(async () => { setLoading(true); const r = await fetch("/api/admin-users"); if (r.ok) setUsers(await r.json()); setLoading(false); }, []);
   useEffect(() => { load(); }, [load]);
+  const filteredUsers = users.filter(u => !search || u.username.toLowerCase().includes(search.toLowerCase()));
+  const { sortedItems: sortedUsers, handleSort, sortConfig } = useSort(filteredUsers);
 
   const saveUser = async () => {
     setSaving(true);
@@ -1252,19 +1397,34 @@ function AccessPage() {
 
   return (
     <div className="animate-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div><h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Access Control</h2><p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>Kelola akun admin panel</p></div>
-        {canCreate && (
-          <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah User</button>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}><Icons.Search /></span>
+            <input className="input" style={{ paddingLeft: 34, width: 220, height: 34, fontSize: 13 }} placeholder="Cari username..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={load}><Icons.Refresh /></button>
+          {canCreate && (
+            <button className="btn btn-primary btn-sm" onClick={openAdd}><Icons.Plus /> Tambah User</button>
+          )}
+        </div>
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {loading ? <div style={{ padding: 20 }}><div className="skeleton" style={{ height: 52 }} /></div> : (
           <div className="table-responsive">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Dibuat</th><th style={{ width: 100 }}>Aksi</th></tr></thead>
+              <thead>
+                <tr>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("username")}>Username <SortIcon sortConfig={sortConfig} columnKey="username" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("role")}>Role <SortIcon sortConfig={sortConfig} columnKey="role" /></th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("created_at")}>Dibuat <SortIcon sortConfig={sortConfig} columnKey="created_at" /></th>
+                  <th style={{ width: 100 }}>Aksi</th>
+                </tr>
+              </thead>
               <tbody>
-                {users.map(u => (
+                {sortedUsers.map(u => (
                   <tr key={u.id}>
                     <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{u.id}</td>
                     <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{u.username}</td>
@@ -1701,6 +1861,7 @@ export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [pageData, setPageData] = useState<unknown>(null);
   const [darkMode, setDarkMode] = useState(true);
   const [currentInvoiceId, setCurrentInvoiceId] = useState<number | null>(null);
   const [prefillPesanan, setPrefillPesanan] = useState<Pesanan | null>(null);
@@ -1711,6 +1872,10 @@ export default function AdminPage() {
   const [userRole, setUserRole] = useState("admin");
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [userName, setUserName] = useState("Admin");
+
+  const [fabPos, setFabPos] = useState({ x: -1, y: -1 });
+  const [isDraggingFab, setIsDraggingFab] = useState(false);
+  const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, moved: false });
 
   useEffect(() => {
     const check = async () => {
@@ -1731,7 +1896,7 @@ export default function AdminPage() {
         if (data.role !== "superadmin" && !perms.includes("all")) {
           if (perms.some((p: string) => p.startsWith("produk_ws:"))) setCurrentPage("katalog");
           else if (perms.some((p: string) => p.startsWith("invoice:"))) setCurrentPage("invoice-list");
-          else if (perms.some((p: string) => p.startsWith("customer:"))) setCurrentPage("customers");
+          else if (perms.some((p: string) => p.startsWith("loyalty:"))) setCurrentPage("loyalty");
           else if (perms.some((p: string) => p.startsWith("chatbot:"))) setCurrentPage("ai-assistant");
           else if (perms.some((p: string) => p.startsWith("pengaturan:"))) setCurrentPage("company");
         }
@@ -1760,6 +1925,7 @@ export default function AdminPage() {
   };
 
   const handleNavigate = (page: Page, data?: unknown) => {
+    setPageData(data);
     if (page === "manual") {
       window.open("/manual", "_blank");
       return;
@@ -1774,6 +1940,43 @@ export default function AdminPage() {
   const goToInvoiceForm = () => { setPrefillPesanan(null); setCurrentPage("invoice-form"); setMobileMenuOpen(false); };
   const createInvoiceFromPesanan = (p: Pesanan) => { setPrefillPesanan(p); setCurrentPage("invoice-form"); setMobileMenuOpen(false); };
   const handleInvoiceCreated = (id: number) => { setCurrentPage("invoice-detail"); setCurrentInvoiceId(id); setMobileMenuOpen(false); };
+
+  const handleFabPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+      moved: false,
+    };
+    setIsDraggingFab(true);
+  };
+
+  const handleFabPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isDraggingFab) return;
+    e.preventDefault(); // Prevent scrolling while dragging on touch
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragRef.current.moved = true;
+    
+    setFabPos({ 
+      x: Math.max(0, Math.min(window.innerWidth - 56, dragRef.current.initialX + dx)), 
+      y: Math.max(0, Math.min(window.innerHeight - 56, dragRef.current.initialY + dy)) 
+    });
+  };
+
+  const handleFabPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    setIsDraggingFab(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handleFabClick = () => {
+    if (!dragRef.current.moved) {
+      setAiOpen(o => !o);
+    }
+  };
 
   if (checkingAuth) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-base)" }}>
@@ -1800,7 +2003,7 @@ export default function AdminPage() {
     if (d.role !== "superadmin" && !perms.includes("all")) {
       if (perms.some((p: string) => p.startsWith("produk_ws:"))) setCurrentPage("katalog");
       else if (perms.some((p: string) => p.startsWith("invoice:"))) setCurrentPage("invoice-list");
-      else if (perms.some((p: string) => p.startsWith("customer:"))) setCurrentPage("customers");
+      else if (perms.some((p: string) => p.startsWith("loyalty:"))) setCurrentPage("loyalty");
       else if (perms.some((p: string) => p.startsWith("chatbot:"))) setCurrentPage("ai-assistant");
       else if (perms.some((p: string) => p.startsWith("pengaturan:"))) setCurrentPage("company");
     }
@@ -1810,7 +2013,7 @@ export default function AdminPage() {
     dashboard: "Dashboard", katalog: "Katalog Produk", stok: "Stok & Kuota",
     "invoice-list": "Daftar Invoice", "invoice-form": "Buat Invoice",
     "invoice-detail": "Detail Invoice", "invoice-types": "Tipe Invoice",
-    customers: "Customer Logbook",
+    loyalty: "Loyalty Logbook",
     knowledge: "Knowledge Base", workshops: "Workshops",
     pesanan: "Pesanan", "riwayat-pesanan": "Riwayat Pesanan", chatlogs: "Chat Logs",
     company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
@@ -1822,7 +2025,7 @@ export default function AdminPage() {
       case "dashboard": return <DashboardPage onNavigate={handleNavigate} />;
       case "katalog": return <KatalogPage />;
       case "stok": return <StokPage />;
-      case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} />;
+      case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} initialSearch={typeof pageData === "string" ? pageData : ""} />;
       case "invoice-form": return <InvoiceFormPage onSuccess={handleInvoiceCreated} onCancel={() => setCurrentPage("invoice-list")} prefillPesanan={prefillPesanan} />;
       case "invoice-detail": return currentInvoiceId ? <InvoiceDetailPage invoiceId={currentInvoiceId} onBack={() => setCurrentPage("invoice-list")} /> : null;
       case "invoice-types": return <InvoiceTypesPage />;
@@ -1831,7 +2034,7 @@ export default function AdminPage() {
       case "pesanan": return <PesananPage onCreateInvoiceFromPesanan={createInvoiceFromPesanan} />;
       case "riwayat-pesanan": return <RiwayatPesananPage />;
       case "chatlogs": return <ChatLogsPage />;
-      case "customers": return <CustomerPage />;
+      case "loyalty": return <LoyaltyPage onNavigate={handleNavigate} />;
       case "company": return <CompanyPage />;
       case "access": return <AccessPage />;
       case "ai-assistant": return <AiAssistantPage />;
@@ -1938,7 +2141,13 @@ export default function AdminPage() {
       {/* ── Floating AI Chat Bubble ───────────────────────────────────────── */}
       {aiOpen && (
         <div className="ai-chat-panel no-print" style={{
-          position: "fixed", bottom: 88, right: 24, zIndex: 9998,
+          position: "fixed", zIndex: 9998,
+          ...(fabPos.x !== -1
+            ? { 
+                top: Math.max(20, Math.min(window.innerHeight - 580, fabPos.y - 570)), 
+                left: Math.max(20, Math.min(window.innerWidth - 400, fabPos.x - 320)) 
+              }
+            : { bottom: 88, right: 24 }),
           width: 380, height: 560,
           background: "var(--bg-card)", border: "1px solid var(--border-2)",
           borderRadius: 18, boxShadow: "0 16px 60px rgba(0,0,0,0.55)",
@@ -1968,13 +2177,17 @@ export default function AdminPage() {
       {/* Bubble button */}
       <button
         className="no-print"
-        onClick={() => setAiOpen(o => !o)}
+        onPointerDown={handleFabPointerDown}
+        onPointerMove={handleFabPointerMove}
+        onPointerUp={handleFabPointerUp}
+        onClick={handleFabClick}
         style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          position: "fixed", zIndex: 9999,
+          ...(fabPos.x !== -1 ? { left: fabPos.x, top: fabPos.y } : { bottom: 24, right: 24 }),
           width: 56, height: 56, borderRadius: "50%", border: "none",
           background: aiOpen ? "linear-gradient(135deg,#0284c7,#06b6d4)" : "linear-gradient(135deg,#0ea5e9,#06b6d4)",
-          boxShadow: "0 4px 24px rgba(14,165,233,0.55)",
-          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: isDraggingFab ? "0 8px 32px rgba(14,165,233,0.7)" : "0 4px 24px rgba(14,165,233,0.55)",
+          cursor: isDraggingFab ? "grabbing" : "grab", display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 26, transition: "all 0.25s cubic-bezier(0.34,1.56,0.64,1)",
           transform: aiOpen ? "rotate(180deg) scale(1.05)" : "rotate(0deg) scale(1)",
         }}

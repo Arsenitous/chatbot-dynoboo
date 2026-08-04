@@ -1,7 +1,8 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import type { Item, ItemType } from "@/lib/supabase";
-import { Icons, Modal, Field, CustomSelect, fmtRp, useToast } from "./ui";
+import { Icons, Modal, Field, CustomSelect, fmtRp, useToast, SortIcon } from "./ui";
+import { useSort } from "@/lib/useSort";
 import { useAccess } from "./AccessContext";
 
 export default function KatalogPage() {
@@ -19,13 +20,18 @@ export default function KatalogPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+
+  const [addStockTarget, setAddStockTarget] = useState<Item | null>(null);
+  const [addStockQty, setAddStockQty] = useState("");
+  const [savingStock, setSavingStock] = useState(false);
 
   const [addingTypeModal, setAddingTypeModal] = useState(false);
   const [newTypeForm, setNewTypeForm] = useState({ nama: "", icon: "📦" });
   const [deletingItemType, setDeletingItemType] = useState<{ id: number; nama: string } | null>(null);
   const [deletingItem, setDeletingItem] = useState<Item | null>(null);
 
-  const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true };
+  const emptyForm = { item_type_id: "", nama: "", deskripsi: "", harga_normal: "", harga_promo: "", satuan: "Pcs", is_active: true, qty_available: "0" };
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
@@ -48,6 +54,7 @@ export default function KatalogPage() {
       harga_promo: String(item.harga_promo ?? ""),
       satuan: item.satuan,
       is_active: item.is_active,
+      qty_available: String(Array.isArray(item.stock) ? item.stock[0]?.qty_available ?? 0 : item.stock?.qty_available ?? 0),
     });
     setEditing(item); setAdding(false);
   };
@@ -62,6 +69,7 @@ export default function KatalogPage() {
       harga_promo: form.harga_promo ? Number(form.harga_promo) : null,
       satuan: form.satuan,
       is_active: form.is_active,
+      qty_available: Number(form.qty_available),
     };
     if (editing) {
       await fetch(`/api/items/${editing.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -127,11 +135,38 @@ export default function KatalogPage() {
   const typeOptions = [{ value: "", label: "Semua Tipe" }, ...itemTypes.map(t => ({ value: String(t.id), label: `${t.icon} ${t.nama}` }))];
   const satOptions = [{ value: "Pcs", label: "Pcs" }, { value: "Slot", label: "Slot" }, { value: "Set", label: "Set" }, { value: "Paket", label: "Paket" }];
 
-  const filtered = items.filter(i => {
-    const matchSearch = !search || i.nama.toLowerCase().includes(search.toLowerCase());
-    const matchType = !filterType || String(i.item_type_id) === filterType;
-    return matchSearch && matchType;
+  const filtered = items.filter(item => {
+    const mSearch = item.nama.toLowerCase().includes(search.toLowerCase());
+    const mType = filterType ? item.item_type_id === Number(filterType) : true;
+    const mStatus = filterStatus === "ALL" ? true : filterStatus === "ACTIVE" ? item.is_active : !item.is_active;
+    return mSearch && mType && mStatus;
   });
+
+  const { sortedItems: sortedFiltered, handleSort, sortConfig } = useSort(filtered);
+
+  const saveQuickStock = async () => {
+    if (!addStockTarget) return;
+    setSavingStock(true);
+    try {
+      const res = await fetch(`/api/stocks/${addStockTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "adjust", adjust_by: Number(addStockQty) }),
+      });
+      if (res.ok) {
+        showToast(`Stok "${addStockTarget.nama}" berhasil ditambah!`);
+        setAddStockTarget(null);
+        load();
+      } else {
+        const d = await res.json();
+        showToast(d.error ?? "Gagal tambah stok", "err");
+      }
+    } catch {
+      showToast("Terjadi kesalahan sistem", "err");
+    } finally {
+      setSavingStock(false);
+    }
+  };
 
   return (
     <div className="animate-in">
@@ -151,11 +186,46 @@ export default function KatalogPage() {
         </div>
       </div>
 
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+        {[
+          { id: "ALL", label: "Total Item", val: items.length, color: "#38bdf8", bg: "rgba(56,189,248,0.12)" },
+          { id: "ACTIVE", label: "Aktif", val: items.filter(c => c.is_active).length, color: "#34d399", bg: "rgba(52,211,153,0.12)" },
+          { id: "INACTIVE", label: "Non-aktif", val: items.filter(c => !c.is_active).length, color: "#f87171", bg: "rgba(239,68,68,0.12)" },
+        ].map(s => {
+          const isActive = filterStatus === s.id;
+          return (
+            <div
+              key={s.id}
+              className="card"
+              style={{
+                padding: "14px 16px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                border: isActive ? `1.5px solid ${s.color}` : "1px solid var(--border)",
+                boxShadow: isActive ? `0 0 16px ${s.color}30` : "none",
+                background: isActive ? `${s.color}10` : "var(--bg-card)",
+              }}
+              onClick={() => setFilterStatus(s.id as any)}
+              title={`Klik untuk memfilter: ${s.label}`}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.val}</p>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: `${s.color}20`, color: s.color }}>
+                  {isActive ? "Aktif" : "Lihat →"}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{s.label}</p>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Filters */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         <div style={{ position: "relative", flex: 1 }}>
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
-          <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari nama produk..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="input" style={{ paddingLeft: 36, width: "100%", height: 38 }} placeholder="Cari nama produk..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={{ width: 200 }}>
           <CustomSelect value={filterType} onChange={setFilterType} options={typeOptions} />
@@ -170,16 +240,16 @@ export default function KatalogPage() {
         ) : (
           <table className="data-table">
             <thead><tr>
-              <th style={{ width: 44 }}>#</th>
-              <th>Nama Item</th>
-              <th>Tipe</th>
-              <th>Harga Normal</th>
-              <th>Harga Promo</th>
-              <th>Status</th>
+              <th style={{ width: 44, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("id")}># <SortIcon sortConfig={sortConfig} columnKey="id" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("nama")}>Nama Item <SortIcon sortConfig={sortConfig} columnKey="nama" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("item_type_id")}>Tipe <SortIcon sortConfig={sortConfig} columnKey="item_type_id" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("harga_normal")}>Harga Normal <SortIcon sortConfig={sortConfig} columnKey="harga_normal" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("harga_promo")}>Harga Promo <SortIcon sortConfig={sortConfig} columnKey="harga_promo" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("is_active")}>Status <SortIcon sortConfig={sortConfig} columnKey="is_active" /></th>
               {(canUpdate || canDelete) && <th style={{ width: 90 }}>Aksi</th>}
             </tr></thead>
             <tbody>
-              {filtered.map(item => (
+              {sortedFiltered.map(item => (
                 <tr key={item.id}>
                   <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{item.id}</td>
                   <td>
@@ -194,6 +264,11 @@ export default function KatalogPage() {
                   {(canUpdate || canDelete) && (
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
+                        {canUpdate && (
+                          <button className="btn btn-primary btn-sm btn-icon" title="Tambah Stok" onClick={() => { setAddStockTarget(item); setAddStockQty("0"); }}>
+                            <Icons.Plus />
+                          </button>
+                        )}
                         {canUpdate && <button className="btn btn-secondary btn-sm btn-icon" onClick={() => openEdit(item)}><Icons.Edit /></button>}
                         {canDelete && <button className="btn btn-danger btn-sm btn-icon" onClick={() => setDeletingItem(item)}><Icons.Trash /></button>}
                       </div>
@@ -228,6 +303,7 @@ export default function KatalogPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Satuan"><CustomSelect value={form.satuan} onChange={v => setForm({ ...form, satuan: v })} options={satOptions} /></Field>
+              <Field label="Stok Awal"><input className="input" type="number" placeholder="0" value={form.qty_available} onChange={e => setForm({ ...form, qty_available: e.target.value })} /></Field>
             </div>
             <Field label="Status">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -240,6 +316,23 @@ export default function KatalogPage() {
                 <Icons.Save /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
               <button className="btn btn-secondary" onClick={() => { setAdding(false); setEditing(null); }}>Batal</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Quick Add Stock Modal */}
+      {addStockTarget && (
+        <Modal title={`Tambah Stok — ${addStockTarget.nama}`} onClose={() => setAddStockTarget(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Field label="Jumlah Tambah">
+              <input className="input" type="number" placeholder="Contoh: 10" value={addStockQty} onChange={e => setAddStockQty(e.target.value)} autoFocus />
+            </Field>
+            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveQuickStock} disabled={savingStock || !addStockQty || Number(addStockQty) <= 0}>
+                <Icons.Save /> {savingStock ? "Menyimpan..." : "Tambah"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setAddStockTarget(null)}>Batal</button>
             </div>
           </div>
         </Modal>

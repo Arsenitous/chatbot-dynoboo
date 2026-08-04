@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import type { InvoiceType, Item, Customer } from "@/lib/supabase";
+import type { InvoiceType, Item, Loyalty, Workshop } from "@/lib/supabase";
 import { Icons, Field, CustomSelect, fmtRp } from "./ui";
 import type { Pesanan } from "@/lib/supabase";
 
@@ -22,9 +22,12 @@ const STATUS_OPTIONS = [
 export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }: Props) {
   const [types, setTypes] = useState<InvoiceType[]>([]);
   const [katalog, setKatalog] = useState<Item[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [loyalties, setLoyalties] = useState<Loyalty[]>([]);
   const [saving, setSaving] = useState(false);
   const [showKatalog, setShowKatalog] = useState(false);
+  const [katalogSearch, setKatalogSearch] = useState("");
+  const [katalogFilter, setKatalogFilter] = useState<"ALL" | "PRODUK" | "WORKSHOP">("ALL");
   const [showLogbook, setShowLogbook] = useState(false);
   const [logbookSearch, setLogbookSearch] = useState("");
   const [saveToLogbook, setSaveToLogbook] = useState(false);
@@ -44,15 +47,17 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
   const [items, setItems] = useState<LineItem[]>([]);
 
   const load = useCallback(async () => {
-    const [tRes, kRes, cRes] = await Promise.all([
+    const [typesRes, itemsRes, custRes, wsRes] = await Promise.all([
       fetch("/api/invoice-types"),
       fetch("/api/items"),
-      fetch("/api/customers?active=true"),
+      fetch("/api/loyalty"),
+      fetch("/api/workshops")
     ]);
-    const t = await tRes.json();
+    const t = await typesRes.json();
     setTypes(t);
-    setKatalog(await kRes.json());
-    if (cRes.ok) setCustomers(await cRes.json());
+    setKatalog(await itemsRes.json());
+    if (custRes.ok) setLoyalties(await custRes.json());
+    if (wsRes.ok) setWorkshops(await wsRes.json());
     if (t.length > 0) setForm(f => ({ ...f, invoice_type_id: String(t[0].id) }));
   }, []);
 
@@ -69,7 +74,7 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
   };
   const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
 
-  const pickCustomer = (c: Customer) => {
+  const pickCustomer = (c: Loyalty) => {
     setForm(f => ({
       ...f,
       customer_name: c.nama,
@@ -108,7 +113,7 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
 
     // Auto-save customer to logbook if toggle is ON
     if (res.ok && saveToLogbook && form.customer_name.trim()) {
-      await fetch("/api/customers", {
+      await fetch("/api/loyalty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -127,11 +132,25 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
   };
 
   const typeOptions = types.map(t => ({ value: String(t.id), label: t.nama }));
-  const filteredCustomers = customers.filter(c =>
+  const filteredCustomers = loyalties.filter(c =>
     c.nama.toLowerCase().includes(logbookSearch.toLowerCase()) ||
     (c.no_hp ?? "").includes(logbookSearch) ||
     (c.email ?? "").toLowerCase().includes(logbookSearch.toLowerCase())
   );
+
+  const activeKatalog = katalog.filter(k => k.is_active);
+  const activeWorkshops = workshops.filter(w => w.is_active);
+  
+  const combinedItems = [
+    ...activeKatalog.map(k => ({ type: 'product', id: k.id, nama: k.nama, icon: k.item_type?.icon ?? "📦", typeName: k.item_type?.nama ?? "Produk", stock: k.stock?.qty_available ?? 0, satuan: k.satuan, harga_normal: k.harga_normal, harga_promo: k.harga_promo })),
+    ...activeWorkshops.map(w => ({ type: 'workshop', id: w.id, nama: w.nama_workshop, icon: "🎫", typeName: "Workshop", stock: "∞", satuan: "Tiket", harga_normal: w.harga_normal ? Number(w.harga_normal) : 0, harga_promo: w.harga_promo ? Number(w.harga_promo) : null }))
+  ];
+
+  const filteredKatalog = combinedItems.filter(item => {
+    const matchSearch = item.nama.toLowerCase().includes(katalogSearch.toLowerCase());
+    const matchType = katalogFilter === "ALL" ? true : katalogFilter === "PRODUK" ? item.type === "product" : item.type === "workshop";
+    return matchSearch && matchType;
+  });
 
   return (
     <div className="animate-in">
@@ -291,18 +310,49 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
         <div className="modal-overlay" onClick={() => setShowKatalog(false)}>
           <div className="modal-box" style={{ maxWidth: 700 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-              <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>Pilih dari Katalog</h3>
+              <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>Pilih dari Katalog & Workshop</h3>
               <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowKatalog(false)}><Icons.X /></button>
+            </div>
+            {/* Search in katalog */}
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }}>
+                  <Icons.Search />
+                </span>
+                <input
+                  className="input"
+                  style={{ paddingLeft: 34 }}
+                  placeholder="Cari produk atau workshop..."
+                  value={katalogSearch}
+                  onChange={e => setKatalogSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                {[
+                  { id: "ALL", label: "Semua" },
+                  { id: "PRODUK", label: "📦 Produk" },
+                  { id: "WORKSHOP", label: "🎫 Workshop" }
+                ].map(t => (
+                  <button key={t.id} className={`btn btn-sm ${katalogFilter === t.id ? "btn-primary" : "btn-secondary"}`} onClick={() => setKatalogFilter(t.id as any)} style={{ borderRadius: 20 }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ padding: 16, maxHeight: "65vh", overflowY: "auto" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {katalog.filter(k => k.is_active).map(item => (
-                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)", cursor: "pointer", transition: "all 0.15s" }}
-                    onClick={() => addFromKatalog(item)} className="catalog-row">
-                    <span style={{ fontSize: 20 }}>{item.item_type?.icon ?? "📦"}</span>
+                {filteredKatalog.map(item => (
+                  <div key={`${item.type}-${item.id}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, background: "var(--bg-card-2)", border: "1px solid var(--border)", cursor: "pointer", transition: "all 0.15s" }}
+                    onClick={() => {
+                        const price = item.harga_promo ?? item.harga_normal;
+                        setItems(prev => [...prev, { item_id: item.type === 'product' ? item.id : undefined, description: item.nama, qty: 1, satuan: item.satuan, harga_satuan: price }]);
+                        setShowKatalog(false);
+                    }} className="catalog-row">
+                    <span style={{ fontSize: 20 }}>{item.icon}</span>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{item.nama}</p>
-                      <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.item_type?.nama} • Stok: {item.stock?.qty_available ?? 0} {item.satuan}</p>
+                      <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.typeName} • Stok: {item.stock} {item.satuan !== "Tiket" ? item.satuan : ""}</p>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       {item.harga_promo ? (
@@ -327,7 +377,7 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
               <div>
                 <h3 style={{ fontWeight: 600, fontSize: 15, color: "var(--text-primary)" }}>Pilih dari Logbook Customer</h3>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{customers.length} customer tersedia</p>
+                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{loyalties.length} customer tersedia</p>
               </div>
               <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowLogbook(false)}><Icons.X /></button>
             </div>
@@ -354,7 +404,7 @@ export default function InvoiceFormPage({ onSuccess, onCancel, prefillPesanan }:
                 <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)" }}>
                   <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
                   <p style={{ fontSize: 13 }}>
-                    {customers.length === 0 ? "Logbook masih kosong. Tambah customer terlebih dahulu." : "Tidak ada customer yang cocok."}
+                    {loyalties.length === 0 ? "Logbook masih kosong. Tambah customer terlebih dahulu." : "Tidak ada customer yang cocok."}
                   </p>
                 </div>
               ) : (

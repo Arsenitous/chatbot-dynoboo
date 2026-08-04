@@ -1,6 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import { Icons, Modal, Field, fmtRp } from "./ui";
+import { Icons, Modal, Field, fmtRp, SortIcon } from "./ui";
+import { useSort } from "@/lib/useSort";
 import { useAccess } from "./AccessContext";
 
 type StockRow = {
@@ -140,6 +141,8 @@ export default function StokPage() {
   if (stockFilter === "TOP_SOLD") {
     filtered.sort((a, b) => b.qty_sold - a.qty_sold);
   }
+
+  const { sortedItems: sortedFiltered, handleSort, sortConfig } = useSort(filtered);
 
   const modalItem = addingFrom ?? editing?.item;
   const modalTitle = addingFrom ? `Inisialisasi Stok: ${addingFrom.nama}` : editing ? `Update Stok: ${editing.item?.nama}` : "";
@@ -283,16 +286,16 @@ export default function StokPage() {
         ) : (
           <table className="data-table">
             <thead><tr>
-              <th>Item</th>
-              <th>Tipe</th>
-              <th>Harga</th>
-              <th style={{ textAlign: "center" }}>Tersedia</th>
-              <th style={{ textAlign: "center" }}>Terjual</th>
-              <th style={{ textAlign: "center" }}>Reserved</th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("item.nama")}>Item <SortIcon sortConfig={sortConfig} columnKey="item.nama" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("item.item_type.nama")}>Tipe <SortIcon sortConfig={sortConfig} columnKey="item.item_type.nama" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("item.harga_normal")}>Harga <SortIcon sortConfig={sortConfig} columnKey="item.harga_normal" /></th>
+              <th style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("qty_available")}>Tersedia <SortIcon sortConfig={sortConfig} columnKey="qty_available" /></th>
+              <th style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("qty_sold")}>Terjual <SortIcon sortConfig={sortConfig} columnKey="qty_sold" /></th>
+              <th style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("qty_reserved")}>Reserved <SortIcon sortConfig={sortConfig} columnKey="qty_reserved" /></th>
               {(canUpdate || canDelete) && <th style={{ width: 140 }}>Aksi</th>}
             </tr></thead>
             <tbody>
-              {filtered.map(s => (
+              {sortedFiltered.map(s => (
                 <tr key={s.id}>
                   <td>
                     <p style={{ fontWeight: 600, color: s.item?.is_active ? "var(--text-primary)" : "var(--text-muted)" }}>{s.item?.nama ?? `Item #${s.item_id}`}</p>

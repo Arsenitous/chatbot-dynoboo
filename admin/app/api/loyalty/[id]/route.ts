@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data, error } = await supabase.from("customers").select("*").eq("id", id).single();
+  const { data, error } = await supabase.from("loyalty").select("*").eq("id", id).single();
   if (error) return Response.json({ error: error.message }, { status: 404 });
   return Response.json(data);
 }
@@ -14,7 +14,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const body = await request.json();
   const { data, error } = await supabase
-    .from("customers")
+    .from("loyalty")
     .update({
       nama: body.nama,
       no_hp: body.no_hp || null,
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { error } = await supabase.from("customers").delete().eq("id", id);
+  const { error } = await supabase.from("loyalty").delete().eq("id", id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return new Response(null, { status: 204 });
 }

@@ -65,9 +65,9 @@ export type AdminUser = {
   created_at: string;
 };
 
-// ─── Customer Logbook Types ───────────────────────────────────────────────────
+// ─── Loyalty Logbook Types ───────────────────────────────────────────────────
 
-export type Customer = {
+export type Loyalty = {
   id: number;
   nama: string;
   no_hp: string | null;

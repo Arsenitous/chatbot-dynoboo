@@ -26,7 +26,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  
+  // Detach from invoice items first to prevent foreign key constraint errors
+  await supabase.from("invoice_items").update({ item_id: null }).eq("item_id", id);
+  
+  // Delete associated stock
+  await supabase.from("stocks").delete().eq("item_id", id);
+  
+  // Finally, delete the item itself
   const { error } = await supabase.from("items").delete().eq("id", id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  
   return Response.json({ ok: true });
 }

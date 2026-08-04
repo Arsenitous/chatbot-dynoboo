@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const activeOnly = searchParams.get("active") === "true";
 
-  let query = supabase.from("customers").select("*").order("nama");
+  let query = supabase.from("loyalty").select("*").order("nama");
   if (activeOnly) query = query.eq("is_active", true);
 
   const { data, error } = await query;
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { data, error } = await supabase
-    .from("customers")
+    .from("loyalty")
     .insert({
       nama: body.nama,
       no_hp: body.no_hp || null,

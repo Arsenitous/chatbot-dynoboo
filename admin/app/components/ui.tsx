@@ -107,6 +107,12 @@ export const Icons = {
 };
 
 
+// ─── Sort Icon ───────────────────────────────────────────────────────────────
+export function SortIcon({ sortConfig, columnKey }: { sortConfig: { key: string; direction: "asc" | "desc" } | null, columnKey: string }) {
+  if (sortConfig?.key !== columnKey) return <span style={{ opacity: 0.3, marginLeft: 4, fontSize: 10 }}>↕</span>;
+  return <span style={{ marginLeft: 4, fontSize: 10 }}>{sortConfig.direction === "asc" ? "▲" : "▼"}</span>;
+}
+
 // ─── Custom Select ────────────────────────────────────────────────────────────
 type SelectOption = { value: string; label: string; color?: string };
 export function CustomSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: SelectOption[] }) {

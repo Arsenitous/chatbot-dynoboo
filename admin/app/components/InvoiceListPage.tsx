@@ -1,12 +1,14 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import type { Invoice, InvoiceType } from "@/lib/supabase";
-import { Icons, CustomSelect, InvoiceStatusBadge, fmtRp, Modal, Field, useToast } from "./ui";
+import { Icons, CustomSelect, InvoiceStatusBadge, fmtRp, Modal, Field, useToast, SortIcon } from "./ui";
+import { useSort } from "@/lib/useSort";
 import { useAccess } from "./AccessContext";
 
 type Props = {
   onViewInvoice: (id: number) => void;
   onCreateInvoice: () => void;
+  initialSearch?: string;
 };
 
 const STATUS_OPTIONS = [
@@ -33,7 +35,7 @@ const MONTH_OPTIONS = [
   { value: "12", label: "Desember" },
 ];
 
-export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Props) {
+export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initialSearch }: Props) {
   const hasAccess = useAccess();
   const canCreate = hasAccess("invoice", "create");
   const canUpdate = hasAccess("invoice", "update");
@@ -44,7 +46,7 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch || "");
 
   // Modal Pembatalan State
   const [targetCancelInvoice, setTargetCancelInvoice] = useState<Invoice | null>(null);
@@ -95,6 +97,8 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
 
     return matchesSearch && matchesType && matchesStatus;
   });
+
+  const { sortedItems: sortedFiltered, handleSort, sortConfig } = useSort(filtered);
 
   const countActive = invoices.filter(i => i.status_pembayaran !== "CANCELLED").length;
   const totalRevenue = invoices.filter(i => i.status_pembayaran === "PAID").reduce((s, i) => s + Number(i.grand_total), 0);
@@ -332,16 +336,16 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice }: Prop
         ) : (
           <table className="data-table">
             <thead><tr>
-              <th>No Invoice</th>
-              <th>Tanggal</th>
-              <th>Customer</th>
-              <th>Tipe</th>
-              <th>Grand Total</th>
-              <th>Status</th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("invoice_no")}>No Invoice <SortIcon sortConfig={sortConfig} columnKey="invoice_no" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("invoice_date")}>Tanggal <SortIcon sortConfig={sortConfig} columnKey="invoice_date" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("customer_name")}>Customer <SortIcon sortConfig={sortConfig} columnKey="customer_name" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("invoice_type.nama")}>Tipe <SortIcon sortConfig={sortConfig} columnKey="invoice_type.nama" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("grand_total")}>Grand Total <SortIcon sortConfig={sortConfig} columnKey="grand_total" /></th>
+              <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("status_pembayaran")}>Status <SortIcon sortConfig={sortConfig} columnKey="status_pembayaran" /></th>
               <th style={{ width: 120 }}>Aksi</th>
             </tr></thead>
             <tbody>
-              {filtered.map(inv => (
+              {sortedFiltered.map(inv => (
                 <tr key={inv.id} style={{ cursor: "pointer" }} onClick={() => onViewInvoice(inv.id)}>
                   <td><span style={{ fontFamily: "monospace", fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{inv.invoice_no}</span></td>
                   <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmt(inv.invoice_date)}</td>
