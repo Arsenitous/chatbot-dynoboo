@@ -73,6 +73,20 @@ export async function POST(request: NextRequest) {
     }));
     await supabase.from("invoice_items").insert(lineItems);
 
+    // Update stocks
+    for (const item of lineItems) {
+      if (item.item_id) {
+        const { data: stockData } = await supabase.from("stocks").select("qty_available, qty_sold").eq("item_id", item.item_id).single();
+        if (stockData) {
+          const newAvailable = Math.max(0, (stockData.qty_available ?? 0) - item.qty);
+          const newSold = (stockData.qty_sold ?? 0) + item.qty;
+          await supabase.from("stocks").update({ qty_available: newAvailable, qty_sold: newSold }).eq("item_id", item.item_id);
+        } else {
+          await supabase.from("stocks").insert({ item_id: item.item_id, qty_available: 0, qty_sold: item.qty });
+        }
+      }
+    }
+
     // Recalculate totals
     const subtotal = items.reduce((sum: number, i: { qty: number; harga_satuan: number }) => sum + i.qty * i.harga_satuan, 0);
     const grandTotal = subtotal - (payload.discount ?? 0);
