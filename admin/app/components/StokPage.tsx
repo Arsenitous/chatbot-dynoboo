@@ -17,8 +17,7 @@ type StockRow = {
 type WorkshopSalesRow = {
   id: number;
   nama_workshop: string;
-  kuota: number;
-  harga: number;
+  is_active: boolean;
   tiket_terjual: number;
 };
 
@@ -378,31 +377,20 @@ export default function StokPage() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
             {workshops.map(ws => {
-              const remaining = ws.kuota - ws.tiket_terjual;
-              const isFull = remaining <= 0;
               return (
-                <div key={ws.id} style={{ padding: 14, borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-card-2)", position: "relative", overflow: "hidden", transition: "transform 0.2s, box-shadow 0.2s" }}>
-                  {isFull && <div style={{ position: "absolute", top: 0, right: 0, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 800, padding: "4px 14px", borderBottomLeftRadius: 10, boxShadow: "-2px 2px 8px rgba(239,68,68,0.3)" }}>FULL</div>}
-                  <p style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)", marginBottom: 4, paddingRight: isFull ? 50 : 0 }}>{ws.nama_workshop}</p>
-                  <p style={{ fontSize: 12, color: "#a78bfa", fontWeight: 700, marginBottom: 14 }}>{fmtRp(ws.harga)}</p>
-                  
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    <div style={{ flex: 1, background: "rgba(56,189,248,0.1)", borderRadius: 8, padding: "10px", textAlign: "center", border: "1px solid rgba(56,189,248,0.2)" }}>
-                      <p style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>Terjual</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, color: "#38bdf8", marginTop: 4 }}>{ws.tiket_terjual}</p>
+                <div key={ws.id} style={{ padding: 16, borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-card-2)", position: "relative", overflow: "hidden", transition: "transform 0.2s, box-shadow 0.2s", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                      <p style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)", flex: 1, paddingRight: 8, lineHeight: 1.4 }}>{ws.nama_workshop}</p>
+                      <span className={`badge ${ws.is_active ? "badge-active" : "badge-closed"}`} style={{ flexShrink: 0, padding: "4px 8px", fontSize: 10 }}>
+                        {ws.is_active ? "Aktif" : "Nonaktif"}
+                      </span>
                     </div>
-                    <div style={{ flex: 1, background: isFull ? "rgba(239,68,68,0.1)" : "rgba(167,139,250,0.1)", borderRadius: 8, padding: "10px", textAlign: "center", border: isFull ? "1px solid rgba(239,68,68,0.2)" : "1px solid rgba(167,139,250,0.2)" }}>
-                      <p style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>Sisa Kuota</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, color: isFull ? "#ef4444" : "#a78bfa", marginTop: 4 }}>{Math.max(0, remaining)}</p>
+                    
+                    <div style={{ background: "rgba(56,189,248,0.08)", borderRadius: 8, padding: "16px 12px", textAlign: "center", border: "1px solid rgba(56,189,248,0.2)" }}>
+                      <p style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Total Terjual</p>
+                      <p style={{ fontSize: 28, fontWeight: 800, color: "#38bdf8", marginTop: 6 }}>{ws.tiket_terjual}</p>
                     </div>
-                  </div>
-                  
-                  <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (ws.tiket_terjual / (ws.kuota || 1)) * 100)}%`, background: isFull ? "#ef4444" : "linear-gradient(90deg, #38bdf8, #a78bfa)", borderRadius: 3, transition: "width 0.5s ease-out" }} />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
-                    <span>0%</span>
-                    <span>Total Kuota: {ws.kuota}</span>
                   </div>
                 </div>
               )
