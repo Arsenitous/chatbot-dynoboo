@@ -440,7 +440,7 @@ function DashboardPage({ onNavigate }: { onNavigate: (page: Page, data?: unknown
       {/* Top Grid - 4 KPI Cards */}
       <div className="dashboard-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
         <StatCard label="Revenue (PAID)" value={loading ? "—" : fmtRp(totalPaidRevenue)} color="#10b981" bg="rgba(16,185,129,0.15)" icon={<Icons.TrendingUp />} sub="Total dana masuk" />
-        <StatCard label="Total Transaksi" value={loading ? "—" : invoices.length} color="#38bdf8" bg="rgba(56,189,248,0.15)" icon={<Icons.Receipt />} sub={`${countPaid} lunas, ${countUnpaid} belum`} />
+        <StatCard label="Total Transaksi" value={loading ? "—" : (countPaid + countDP + countUnpaid)} color="#38bdf8" bg="rgba(56,189,248,0.15)" icon={<Icons.Receipt />} sub={`${countPaid} lunas, ${countUnpaid} belum`} />
         <StatCard label="Katalog Produk" value={loading ? "—" : items.length} color="#06b6d4" bg="rgba(6,182,212,0.15)" icon={<Icons.Package />} sub={`${lowStockItems.length} stok kritis`} />
         <StatCard label="Pesanan Pre-Order" value={loading ? "—" : pesanan.length} color="#f59e0b" bg="rgba(245,158,11,0.15)" icon={<Icons.Orders />} sub="dari chatbot" />
       </div>
