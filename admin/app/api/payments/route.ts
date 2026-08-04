@@ -19,26 +19,29 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const user = cookieStore.get("dynoboo_user")?.value ?? "superadmin";
 
+  const invoiceId = parseInt(body.invoice_id, 10);
+
   const { data: payment, error } = await supabase
     .from("payments")
-    .insert({ ...body, dicatat_oleh: user })
+    .insert({ ...body, invoice_id: invoiceId, dicatat_oleh: user })
     .select()
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   // Recalculate dp_amount and update invoice status
-  const { data: allPayments } = await supabase
+  const { data: allPayments, error: payErr } = await supabase
     .from("payments")
     .select("jumlah")
-    .eq("invoice_id", body.invoice_id);
+    .eq("invoice_id", invoiceId);
+    
   const { data: invoice } = await supabase
     .from("invoices")
-    .select("grand_total")
-    .eq("id", body.invoice_id)
+    .select("grand_total, subtotal, discount")
+    .eq("id", invoiceId)
     .single();
 
   const totalPaid = (allPayments ?? []).reduce((s, p) => s + Number(p.jumlah), 0);
-  const grandTotal = Number(invoice?.grand_total ?? 0);
+  const grandTotal = Number(invoice?.grand_total ?? (Number(invoice?.subtotal ?? 0) - Number(invoice?.discount ?? 0)));
   const sisaTagihan = Math.max(0, grandTotal - totalPaid);
   let newStatus = "UNPAID";
   if (totalPaid >= grandTotal && grandTotal > 0) newStatus = "PAID";
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
   await supabase
     .from("invoices")
     .update({ dp_amount: totalPaid, sisa_tagihan: sisaTagihan, status_pembayaran: newStatus })
-    .eq("id", body.invoice_id);
+    .eq("id", invoiceId);
 
   return Response.json({ payment, new_status: newStatus }, { status: 201 });
 }

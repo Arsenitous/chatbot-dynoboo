@@ -10,15 +10,16 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
 
   if (pmt) {
     // Recalculate
-    const { data: allPayments } = await supabase.from("payments").select("jumlah").eq("invoice_id", pmt.invoice_id);
-    const { data: invoice } = await supabase.from("invoices").select("grand_total").eq("id", pmt.invoice_id).single();
+    const invoiceId = parseInt(pmt.invoice_id, 10);
+    const { data: allPayments } = await supabase.from("payments").select("jumlah").eq("invoice_id", invoiceId);
+    const { data: invoice } = await supabase.from("invoices").select("grand_total, subtotal, discount").eq("id", invoiceId).single();
     const totalPaid = (allPayments ?? []).reduce((s, p) => s + Number(p.jumlah), 0);
-    const grandTotal = Number(invoice?.grand_total ?? 0);
+    const grandTotal = Number(invoice?.grand_total ?? (Number(invoice?.subtotal ?? 0) - Number(invoice?.discount ?? 0)));
     const sisaTagihan = Math.max(0, grandTotal - totalPaid);
     let newStatus = "UNPAID";
     if (totalPaid >= grandTotal && grandTotal > 0) newStatus = "PAID";
     else if (totalPaid > 0) newStatus = "DP";
-    await supabase.from("invoices").update({ dp_amount: totalPaid, sisa_tagihan: sisaTagihan, status_pembayaran: newStatus }).eq("id", pmt.invoice_id);
+    await supabase.from("invoices").update({ dp_amount: totalPaid, sisa_tagihan: sisaTagihan, status_pembayaran: newStatus }).eq("id", invoiceId);
   }
   return Response.json({ ok: true });
 }
