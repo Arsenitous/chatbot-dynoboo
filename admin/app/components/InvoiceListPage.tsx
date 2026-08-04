@@ -9,6 +9,7 @@ type Props = {
   onViewInvoice: (id: number) => void;
   onCreateInvoice: () => void;
   initialSearch?: string;
+  initialFilters?: { filterMonth?: string; filterYear?: string };
 };
 
 const STATUS_OPTIONS = [
@@ -35,7 +36,7 @@ const MONTH_OPTIONS = [
   { value: "12", label: "Desember" },
 ];
 
-export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initialSearch }: Props) {
+export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initialSearch, initialFilters }: Props) {
   const hasAccess = useAccess();
   const canCreate = hasAccess("invoice", "create");
   const canUpdate = hasAccess("invoice", "update");
@@ -46,6 +47,8 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initia
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterMonth, setFilterMonth] = useState(initialFilters?.filterMonth || "");
+  const [filterYear, setFilterYear] = useState(initialFilters?.filterYear || "");
   const [search, setSearch] = useState(initialSearch || "");
 
   // Modal Pembatalan State
@@ -95,7 +98,14 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initia
       matchesStatus = inv.status_pembayaran === filterStatus;
     }
 
-    return matchesSearch && matchesType && matchesStatus;
+    let matchesMonthYear = true;
+    if (filterMonth || filterYear) {
+      const d = new Date(inv.invoice_date);
+      if (filterMonth && (d.getMonth() + 1).toString() !== filterMonth) matchesMonthYear = false;
+      if (filterYear && d.getFullYear().toString() !== filterYear) matchesMonthYear = false;
+    }
+
+    return matchesSearch && matchesType && matchesStatus && matchesMonthYear;
   });
 
   const { sortedItems: sortedFiltered, handleSort, sortConfig } = useSort(filtered);
@@ -326,6 +336,8 @@ export default function InvoiceListPage({ onViewInvoice, onCreateInvoice, initia
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}><Icons.Search /></span>
           <input className="input" style={{ paddingLeft: 36 }} placeholder="Cari no invoice atau nama customer..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <div style={{ width: 140 }}><CustomSelect value={filterMonth} onChange={setFilterMonth} options={[{value: "", label: "Bulan (Semua)"}, ...MONTH_OPTIONS]} /></div>
+        <div style={{ width: 120 }}><CustomSelect value={filterYear} onChange={setFilterYear} options={[{value: "", label: "Tahun (Semua)"}, ...YEAR_OPTIONS]} /></div>
         <div style={{ width: 220 }}><CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} /></div>
         <div style={{ width: 180 }}><CustomSelect value={filterType} onChange={setFilterType} options={typeOptions} /></div>
       </div>

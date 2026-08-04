@@ -109,7 +109,7 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
           ? `*Status      : LUNAS [OK]*`
           : `*Sisa Tagihan: ${fmtRp(sisaVal)}*`,
       ] : [
-        `Status      : ${invoice.status_pembayaran}`,
+        `Status      : ${computedStatus}`,
       ]),
       `-----------------------------------`,
       isLunas
@@ -134,6 +134,18 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
   const fmt = (d: string) => new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
   const payments = invoice.payments ?? [];
   const totalPaid = payments.reduce((s, p) => s + Number(p.jumlah), 0);
+  const grandTotalVal = invoice.subtotal - invoice.discount;
+  
+  let computedStatus = invoice.status_pembayaran;
+  if (computedStatus !== "CANCELLED") {
+    if (totalPaid >= grandTotalVal && grandTotalVal > 0) {
+      computedStatus = "PAID";
+    } else if (totalPaid > 0) {
+      computedStatus = "DP";
+    } else {
+      computedStatus = "UNPAID";
+    }
+  }
 
   return (
     <div className="animate-in">
@@ -170,7 +182,7 @@ export default function InvoiceDetailPage({ invoiceId, onBack }: Props) {
             <p><span>Invoice No : </span><strong style={{ fontFamily: "monospace" }}>{invoice.invoice_no}</strong></p>
             <div style={{ marginTop: 16, textAlign: "right" }}>
               <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: "#475569" }}>Status Pembayaran</p>
-              <div className={`invoice-status-badge inv-status-${invoice.status_pembayaran.toLowerCase()}`}>{invoice.status_pembayaran}</div>
+              <div className={`invoice-status-badge inv-status-${computedStatus.toLowerCase()}`}>{computedStatus}</div>
             </div>
           </div>
         </div>

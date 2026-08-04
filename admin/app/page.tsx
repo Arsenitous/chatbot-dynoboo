@@ -16,6 +16,7 @@ import InvoiceDetailPage from "./components/InvoiceDetailPage";
 import CompanyPage from "./components/CompanyPage";
 import AiAssistantPage from "./components/AiAssistantPage";
 import LoyaltyPage from "./components/LoyaltyPage";
+import MonthlyReportPage from "./components/MonthlyReportPage";
 import { AccessContext, useAccess } from "./components/AccessContext";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ type Page =
   | "dashboard"
   | "katalog" | "stok"
   | "invoice-list" | "invoice-form" | "invoice-detail" | "invoice-types"
-  | "loyalty"
+  | "loyalty" | "laporan-penjualan"
   | "knowledge" | "workshops" | "pesanan" | "riwayat-pesanan" | "chatlogs"
   | "company" | "access" | "ai-assistant" | "manual";
 
@@ -41,6 +42,12 @@ const NAV_GROUPS = [
         items: [
           { id: "invoice-list", label: "Daftar Invoice", icon: <Icons.Receipt /> },
           { id: "invoice-form", label: "Buat Invoice", icon: <Icons.Plus /> },
+        ],
+      },
+      {
+        label: "Laporan",
+        items: [
+          { id: "laporan-penjualan", label: "Laporan Penjualan", icon: <Icons.BarChart /> },
         ],
       },
       {
@@ -2013,7 +2020,7 @@ export default function AdminPage() {
     dashboard: "Dashboard", katalog: "Katalog Produk", stok: "Stok & Kuota",
     "invoice-list": "Daftar Invoice", "invoice-form": "Buat Invoice",
     "invoice-detail": "Detail Invoice", "invoice-types": "Tipe Invoice",
-    loyalty: "Loyalty Logbook",
+    loyalty: "Loyalty Logbook", "laporan-penjualan": "Laporan Penjualan",
     knowledge: "Knowledge Base", workshops: "Workshops",
     pesanan: "Pesanan", "riwayat-pesanan": "Riwayat Pesanan", chatlogs: "Chat Logs",
     company: "Profil Toko", access: "Access Control", "ai-assistant": "AI Assistant",
@@ -2025,7 +2032,7 @@ export default function AdminPage() {
       case "dashboard": return <DashboardPage onNavigate={handleNavigate} />;
       case "katalog": return <KatalogPage />;
       case "stok": return <StokPage />;
-      case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} initialSearch={typeof pageData === "string" ? pageData : ""} />;
+      case "invoice-list": return <InvoiceListPage onViewInvoice={goToInvoiceDetail} onCreateInvoice={goToInvoiceForm} initialSearch={typeof pageData === "string" ? pageData : ""} initialFilters={typeof pageData === "object" ? (pageData as any) : undefined} />;
       case "invoice-form": return <InvoiceFormPage onSuccess={handleInvoiceCreated} onCancel={() => setCurrentPage("invoice-list")} prefillPesanan={prefillPesanan} />;
       case "invoice-detail": return currentInvoiceId ? <InvoiceDetailPage invoiceId={currentInvoiceId} onBack={() => setCurrentPage("invoice-list")} /> : null;
       case "invoice-types": return <InvoiceTypesPage />;
@@ -2035,6 +2042,7 @@ export default function AdminPage() {
       case "riwayat-pesanan": return <RiwayatPesananPage />;
       case "chatlogs": return <ChatLogsPage />;
       case "loyalty": return <LoyaltyPage onNavigate={handleNavigate} />;
+      case "laporan-penjualan": return <MonthlyReportPage onNavigate={handleNavigate} />;
       case "company": return <CompanyPage />;
       case "access": return <AccessPage />;
       case "ai-assistant": return <AiAssistantPage />;
